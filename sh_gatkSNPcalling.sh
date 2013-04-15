@@ -302,7 +302,7 @@ echo "----------------"
 #    rm $dir2/$filteredSNP ## SNPs file after filter step. Will be used for annotations, better to keep it
 #    rm $dir2/"$filteredSNP".idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
 #    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
-    rm $dir2/tmp ## Temporary folder used by Java
+    rm -rf $dir2/tmp ## Temporary folder used by Java
 
 done
 
