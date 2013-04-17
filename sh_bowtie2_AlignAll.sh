@@ -196,15 +196,13 @@ fi
 echo ""
 echo "-- Starting Trimming --"
 echo ""
-# No output options on pyadapter_trim.py, we need to cd to destination folder
-cd $dir2/
 while read j;
 do
     read1=`echo $j | cut -d" " -f1`
     read2=`echo $j | cut -d" " -f2`
     out2=`basename $read1 | sed "s/$fileext/.trimlog/g" | sed 's/_R1//g'`
     echo "Trimming" $dir/$read1
-    pyadapter_trim.py -a $dir/$read1 -b $dir/$read2 >$dir2/$logs/$out2
+    pyadapter_trim.py -a $dir/$read1 -b $dir/$read2 -o $dir2/ >$dir2/$logs/$out2
 done < $dir2/TrimFastqs
 echo ""
 echo "-- Trimming done! --"
