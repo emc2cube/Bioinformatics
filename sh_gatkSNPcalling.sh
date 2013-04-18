@@ -42,11 +42,12 @@ refgenome="/media/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
 #
 # List of the targeted intervals we wanted to sequence. 
 # This is necessary as only about 60-70% of all the reads will end up in exonic regions and the rest may align anywhere else in the genome.
-# To restrict the output to exonic sequences, generate a file containing all the exons plus 50bp at each end for getting splice site information as well.
+# To restrict the output to exonic sequences, generate a file containing for example all the exons plus 50bp at each end for getting splice site information as well.
 # This can be done using the UCSC Table Browser (http://genome.ucsc.edu/cgi-bin/hgTables?command=start).
 # Choose the hg19 assembly of the human genome and set the track to RefSeq genes and the table to refGene.
 # Use BED format as output format and assign the file an appropriate name.
-# By clicking on get output, several more options can be made: Choose ”create one bed record per Exon plus 50bp at each end” and save the file.
+# By clicking on get output, several more options can be made: Choose "create one bed record per Exon plus 50bp at each end" and save the file.
+# If we have it, we can also use a .bed file specific to the library preparation kit targets.
 # example:
 # regions="/media/Tools/GATK/hg19_50bp_RefSeq_refGene.bed"
 regions="/media/Tools/GATK/hg19_50bp_RefSeq_refGene.bed"
@@ -230,6 +231,7 @@ do
     annovarfile=`echo $i | sed 's/.trim.sorted.nodup.bam/.annovar/g'`
     snpsfolder=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam//g'`
     snpssummary=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.snps/g'`
+    coverage=`echo $i | sed 's/.trim.sorted.nodup.bam/.coverage/g'`
 
     # Determining (small) suspicious intervals which are likely in need of realignment
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads
@@ -284,8 +286,25 @@ echo ""
     summarize_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb -outfile $dir2/$snpsfolder/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
 
 echo ""
+echo "-- Annotation done. --"
+
+echo ""
+echo "-- Computing coverage --"
+echo ""
+
+    echo "Processing" $recal
+    # Will compute all coverage informations needed
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $refgenome -I $dir2/$recal -o $dir2/$coverage -nt $threads -L $regions
+    # Copy the coverage summary file to SNP folder as it will be archived later for easy download
+    cp $dir2/$coverage".sample_summary" $dir2/$snpsfolder/
+
+echo ""
+echo "-- Coverage computed --"
+
+echo ""
 echo "-- Sample $snpsfolder is done, results are in $dir2/$snpsfolder --"
 echo "----------------"
+
 # Remove indermediate files
     rm $dir2/$i
     [ -f $dir2/$nodupbai ] && rm $dir2/$nodupbai
@@ -302,6 +321,7 @@ echo "----------------"
 #    rm $dir2/$filteredSNP ## SNPs file after filter step. Will be used for annotations, better to keep it
 #    rm $dir2/"$filteredSNP".idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
 #    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
+	rm $dir2/$coverage ## Huge file! not sure if we should keep it.
     rm -rf $dir2/tmp ## Temporary folder used by Java
 
 done
