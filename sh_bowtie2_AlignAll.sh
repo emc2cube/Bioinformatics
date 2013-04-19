@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# usage: sh_bowtie2_AlignAll.sh </path/to/fastq/files/> [/path/to/sam/files/]
+# usage: sh_bowtie2_AlignAll.sh </path/to/fastq/files/> </path/to/sam/files/> [/path/to/config/file.ini]
 #
 ## Description ##
 #
@@ -12,7 +12,7 @@
 ## Configurable variables ##
 #
 # bowtie2 indexed reference genome location
-refgenome="/Tools/RefGenomes/gatk_2.3_ucsc_hg19/gatk_2.3_ucsc_hg19"
+bt_refgenome="/Tools/RefGenomes/gatk_2.3_ucsc_hg19/gatk_2.3_ucsc_hg19"
 #
 # Run nproc and get the numbers of all installed CPU
 #threads=$(nproc --all)
@@ -50,10 +50,13 @@ dir="$1"
 # Get destination directory
 dir2="$2"
 
+# Get config file location
+config="$3"
+
 # Check paths and trailing / in directories
-if [ -z $dir ]
+if [ -z "$dir" -o -z "$dir2" ]
 then
-    echo "usage: sh_bowtie2_AlignAll.sh <.fastq(.gz) folder> [destination folder]"
+    echo "usage: sh_bowtie2_AlignAll.sh <.fastq(.gz) folder> <destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
@@ -62,14 +65,14 @@ then
     dir=${dir%?}
 fi
 
-if [ -z $dir2 ]
-then
-    dir2="."
-fi
-
 if [ ${dir2: -1} == "/" ]
 then
     dir2=${dir2%?}
+fi
+
+if [ ! -z "$config" ]
+then
+    source "$config"
 fi
 
 # Test if sequence files are .fastq or .fastq.gz
@@ -102,7 +105,7 @@ fi
 echo ""
 echo "-- Informations --"
 echo ""
-echo "Using $refgenome as reference genome"
+echo "Using $bt_refgenome as reference genome"
 echo "Your $fileext files are located in $dir/"
 echo "Sorted and indexed .bam will be created into $dir2/"
 if [ $underdet -eq "0" ]
@@ -119,7 +122,7 @@ then
 fi
 echo "This computer have" $(nproc --all) "CPUs installed, $threads CPUs will be used"
 echo ""
-echo "You can change these parameters by editing sh_bowtie2_AlignAll.sh"
+echo "You can change these parameters by using a custom config file"
 
 # Initialize
 [ -f $dir2/temp1 ] && rm $dir2/temp1
@@ -230,7 +233,7 @@ do
     CN=`head -n 1 $dir2/$read1 | awk -F: '{print $1}' | sed 's/@//'`
     PU=`head -n 1 $dir2/$read1 | awk -F: '{print $3}'`
     echo "Aligning" $dir2/$read1
-    bowtie2 -p $threads --rg-id "$LB"_"$SM" --rg CN:$CN --rg LB:$LB --rg PL:$PL --rg PU:$PU --rg SM:$SM -x $refgenome -S $dir2/$out -1 $dir2/$read1 -2 $dir2/$read2 2>$dir2/$logs/$out2
+    bowtie2 -p $threads --rg-id "$LB"_"$SM" --rg CN:$CN --rg LB:$LB --rg PL:$PL --rg PU:$PU --rg SM:$SM -x $bt_refgenome -S $dir2/$out -1 $dir2/$read1 -2 $dir2/$read2 2>$dir2/$logs/$out2
 done < $dir2/ReadFastqs
 echo ""
 echo "-- Alignment done! --"

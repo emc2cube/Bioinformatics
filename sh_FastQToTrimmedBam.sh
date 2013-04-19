@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# usage: sh_FastQToTrimmedBam.sh </path/to/fastq(.gz)/folder> [/path/to/destination/folder]
+# usage: sh_FastQToTrimmedBam.sh </path/to/fastq(.gz)/folder> [/path/to/destination/folder] [/path/to/config/file.ini]
 #
 ## Description ##
 #
@@ -9,11 +9,11 @@
 #
 ##
 
-if [ -z "$1" ]
+if [ -z "$1" -o -z "$2" ]
 then
-    echo "usage: sh_FastQToTrimmedBam.sh <.fastq(.gz) folder> [destination folder]"
+    echo "usage: sh_FastQToTrimmedBam.sh <.fastq(.gz) folder> <destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
-sh_bowtie2_AlignAll.sh "$1" "$2"
-sh_samtools_ProcessSams.sh "$2"
+sh_bowtie2_AlignAll.sh "$1" "$2" "$3"
+sh_samtools_ProcessSams.sh "$2" "$3"

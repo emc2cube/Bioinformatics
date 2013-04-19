@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# usage: sh_samtools_ProcessSams.sh [/path/to/sam/files/]
+# usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]
 #
 ## Description ##
 #
@@ -20,14 +20,23 @@ mapq="10"
 # Check paths and trailing / in directories
 dir="$1"
 
+# Get config file location
+config="$2"
+
 if [ -z $dir ]
 then
-    dir="."
+    echo "usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]"
+    exit
 fi
 
 if [ ${dir: -1} == "/" ]
 then
     dir=${dir%?}
+fi
+
+if [ ! -z "$config" ]
+then
+    source "$config"
 fi
 
 # Displaying variables to shell
@@ -46,7 +55,7 @@ else
     fi
 fi
 echo ""
-echo "You can change these parameters by editing sh_samtools_ProcessSams.sh"
+echo "You can change these parameters by using a custom config file"
 
 # Get sam files list
 sam_files=`ls $dir | grep .sam`

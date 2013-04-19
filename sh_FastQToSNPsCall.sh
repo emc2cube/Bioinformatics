@@ -12,10 +12,10 @@
 
 if [ -z "$1" -o -z "$2" -o -z "$3" ]
 then
-    echo "usage: sh_FastQToSNPsCall.sh <.fastq(.gz) folder> <aligned .bam destination folder> <SNPs called destination folder>"
+    echo "usage: sh_FastQToSNPsCall.sh <.fastq(.gz) folder> <aligned .bam destination folder> <SNPs called destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
-sh_bowtie2_AlignAll.sh "$1" "$2"
-sh_samtools_ProcessSams.sh "$2"
-sh_gatkSNPcalling.sh "$2" "$3"
+sh_bowtie2_AlignAll.sh "$1" "$2" "$4"
+sh_samtools_ProcessSams.sh "$2" "$4"
+sh_gatkSNPcalling.sh "$2" "$3" "$4"

@@ -13,7 +13,7 @@
 # - annotate using annovar
 # - merge csv files and do some cleaning for an easy downloadable file
 #
-# usage: sh_gatkSNPcalling.sh <.bam folder> [destination folder]
+# usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]
 #
 ##############################################################
 ##                  Configurable variables                  ##
@@ -37,8 +37,8 @@ annovar="/media/Userland/Applications/annovar"
 # Reference genome (fasta) file.
 # It must be the same one that was indexed by bowtie2 for alignment
 # example:
-# refgenome="/media/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
-refgenome="/media/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
+# fasta_refgenome="/media/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
+fasta_refgenome="/media/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
 #
 # List of the targeted intervals we wanted to sequence. 
 # This is necessary as only about 60-70% of all the reads will end up in exonic regions and the rest may align anywhere else in the genome.
@@ -96,10 +96,13 @@ dir="$1"
 # Get destination directory
 dir2="$2"
 
+# Get config file location
+config="$3"
+
 # Check paths and trailing / in directories
-if [ -z $dir ]
+if [ -z $dir -o -z "$dir2" ]
 then
-    echo "usage: sh_gatkSNPcalling.sh <.bam folder> [destination folder]"
+    echo "usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
@@ -108,14 +111,14 @@ then
     dir=${dir%?}
 fi
 
-if [ -z $dir2 ]
-then
-    dir2="."
-fi
-
 if [ ${dir2: -1} == "/" ]
 then
     dir2=${dir2%?}
+fi
+
+if [ ! -z "$config" ]
+then
+    source "$config"
 fi
 
 # Displaying variables to shell
@@ -126,7 +129,7 @@ echo "PROGRAMS"
 echo "Picard-tools are installed in $picard"
 echo "GATK is installed in $gatk"
 echo "ANNOVAR is installed in $annovar"
-echo "$refgenome will be used as reference genome"
+echo "$fasta_refgenome will be used as reference genome"
 echo ""
 echo "DATABASES"
 echo "Local realigment around known indels will be done using:"
@@ -153,7 +156,7 @@ echo "HARDWARE"
 echo "This computer have" `nproc --all` "CPUs installed, $threads CPUs will be used"
 echo "$mem GB of memory will be allocated to java"
 echo ""
-echo "You can change these parameters by editing sh_gatkSNPcalling.sh"
+echo "You can change these parameters by using a custom config file"
 
 # Starting script.
 echo ""
@@ -234,10 +237,10 @@ do
     coverage=`echo $i | sed 's/.trim.sorted.nodup.bam/.coverage/g'`
 
     # Determining (small) suspicious intervals which are likely in need of realignment
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads
 
     # Running the realigner over those intervals
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals
 
     # When using paired end data, the mate information must be fixed, as alignments may change during the realignment process
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/FixMateInformation.jar I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
@@ -251,8 +254,8 @@ echo ""
 
     echo "Processing" $matefixed
     # Quality score recalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal
 
 echo ""
 echo "-- Recalibration done --"
@@ -263,10 +266,10 @@ echo ""
 
     echo "Processing" $recal
     # Produce raw SNP calls
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics
 
     # Filter SNPs
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5 " --filterName "LowCoverage" --filterExpression "QUAL < 30.0 " --filterName "VeryLowQual" --filterExpression "QUAL > 30.0 && QUAL < 50.0 " --filterName "LowQual" --filterExpression "QD < 1.5 " --filterName "LowQD" --filterExpression "FS > 150 " --filterName "StrandBias"
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5 " --filterName "LowCoverage" --filterExpression "QUAL < 30.0 " --filterName "VeryLowQual" --filterExpression "QUAL > 30.0 && QUAL < 50.0 " --filterName "LowQual" --filterExpression "QD < 1.5 " --filterName "LowQD" --filterExpression "FS > 150 " --filterName "StrandBias"
 
 echo ""
 echo "-- SNPs called --"
@@ -294,7 +297,7 @@ echo ""
 
     echo "Processing" $recal
     # Will compute all coverage informations needed
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $refgenome -I $dir2/$recal -o $dir2/$coverage -nt $threads -L $regions
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -nt $threads -L $regions
     # Copy the coverage summary file to SNP folder as it will be archived later for easy download
     cp $dir2/$coverage".sample_summary" $dir2/$snpsfolder/
 
