@@ -227,8 +227,8 @@ do
         LB=`basename $dir2`
     fi
     SM=`echo $read1 | awk -F_L001_ '{print $1}'`
-    CN=`head -n 1 $read1 | awk -F: '{print $1}' | sed 's/@//'`
-    PU=`head -n 1 $read1 | awk -F: '{print $3}'`
+    CN=`head -n 1 $dir2/$read1 | awk -F: '{print $1}' | sed 's/@//'`
+    PU=`head -n 1 $dir2/$read1 | awk -F: '{print $3}'`
     echo "Aligning" $dir2/$read1
     bowtie2 -p $threads --rg-id "$LB"_"$SM" --rg CN:$CN --rg LB:$LB --rg PL:$PL --rg PU:$PU --rg SM:$SM -x $refgenome -S $dir2/$out -1 $dir2/$read1 -2 $dir2/$read2 2>$dir2/$logs/$out2
 done < $dir2/ReadFastqs
