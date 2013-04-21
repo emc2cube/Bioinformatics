@@ -297,7 +297,7 @@ echo ""
 
     echo "Processing" $recal
     # Will compute all coverage informations needed
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -nt $threads -L $regions
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions
     # Copy the coverage summary file to SNP folder as it will be archived later for easy download
     cp $dir2/$coverage".sample_summary" $dir2/$snpsfolder/
 
@@ -324,7 +324,7 @@ echo "----------------"
 #    rm $dir2/$filteredSNP ## SNPs file after filter step. Will be used for annotations, better to keep it
 #    rm $dir2/"$filteredSNP".idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
 #    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
-	rm $dir2/$coverage ## Huge file! not sure if we should keep it.
+    rm $dir2/$coverage ## Huge file! not sure if we should keep it.
     rm -rf $dir2/tmp ## Temporary folder used by Java
 
 done
