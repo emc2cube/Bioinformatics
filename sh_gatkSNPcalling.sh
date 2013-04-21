@@ -228,13 +228,13 @@ do
     matefixedbai=`echo $i | sed 's/.trim.sorted.nodup.bam/.realigned.fixed.bai/g'`
     recal_data=`echo $i | sed 's/.trim.sorted.nodup.bam/.recal.grp/g'`
     recal=`echo $i | sed 's/.trim.sorted.nodup.bam/.realigned.fixed.recal.bam/g'`
-    rawSNP=`echo $i | sed 's/.trim.sorted.nodup.bam/.rawsnp.vcf/g'`
-    snpmetrics=`echo $i | sed 's/.trim.sorted.nodup.bam/.snpmetrics/g'`
-    filteredSNP=`echo $i | sed 's/.trim.sorted.nodup.bam/.filteredsnps.vcf/g'`
-    annovarfile=`echo $i | sed 's/.trim.sorted.nodup.bam/.annovar/g'`
+    rawSNP=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.rawsnp.vcf/g'`
+    snpmetrics=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.snpmetrics/g'`
+    filteredSNP=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.filteredsnps.vcf/g'`
+    annovarfile=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.annovar/g'`
     snpsfolder=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam//g'`
     snpssummary=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.snps/g'`
-    coverage=`echo $i | sed 's/.trim.sorted.nodup.bam/.coverage/g'`
+    coverage=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.coverage/g'`
 
     # Determining (small) suspicious intervals which are likely in need of realignment
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads
