@@ -297,7 +297,7 @@ echo ""
 
     echo "Processing" $recal
     # Will compute all coverage informations needed
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions -ct 10 -ct 15 -ct 30
     # Copy the coverage summary file to SNP folder as it will be archived later for easy download
     cp $dir2/$coverage".sample_summary" $dir2/$snpsfolder/
 
