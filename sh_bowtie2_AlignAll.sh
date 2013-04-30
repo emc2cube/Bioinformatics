@@ -162,7 +162,6 @@ do
     cat $dir/$i >> $dir/$sampleoutput
     mv $dir/$i $dir/FastQbackup/
 done
-mv $dir/FastQbackup/*_L001_*_001* $dir/ # idiot-proof: put _L001_*_001 files back
 echo ""
 echo "-- Files merged --"
 fi
