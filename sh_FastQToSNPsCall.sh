@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# usage: sh_FastQToSNPsCall.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder>
+# Usage: sh_FastQToSNPsCall.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
 #
 ## Description ##
 #
@@ -12,7 +12,14 @@
 
 if [ -z "$1" -o -z "$2" -o -z "$3" ]
 then
-    echo "usage: sh_FastQToSNPsCall.sh <.fastq(.gz) folder> <aligned .bam destination folder> <SNPs called destination folder> [/path/to/config/file.ini]"
+    echo "Usage: sh_FastQToSNPsCall.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]"
+    exit
+fi
+
+if [ -n "$4" ] && [ "${4: -4}" != ".ini" ]
+then
+    echo "Invalid config file detected. Is it an .ini file?"
+    echo "Usage: sh_FastQToSNPsCall.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]"
     exit
 fi
 

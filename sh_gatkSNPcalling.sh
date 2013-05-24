@@ -1,5 +1,7 @@
 #!/bin/bash
 #
+# Usage: sh_gatkSNPcalling.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
+#
 ##############################################################
 ##                      Description                         ##
 ##############################################################
@@ -12,12 +14,25 @@
 # - call SNPs.
 # - annotate using annovar
 # - merge csv files and do some cleaning for an easy downloadable file
-#
-# usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]
+# As this script will be the last one from the workflow, an option exist to send an email when the job is complete.
 #
 ##############################################################
 ##                  Configurable variables                  ##
 ##############################################################
+#
+# Mark for duplicates
+# In case of exome sequencing (not targetted sequencing) we want to mark and remove duplicates.
+# Yes = 1 ; No = 0
+markduplicates="0"
+#
+# Send an email to this address when a job is done. Separate by commas for multiple recipients.
+# default no email sent
+email="/dev/null"
+#
+# Send this email as if it was from a custom address
+# Change it to use it with IFTTT.com for example
+# default is user@host
+fromemail="`id -un`@`hostname -A`"
 #
 # Picard-tools location
 # example:
@@ -68,11 +83,6 @@ onekGph1="/media/Tools/GATK/1000G_phase1.indels.hg19.vcf"
 # dbSNP="/Tools/GATK/dbsnp_137.hg19.vcf"
 dbSNP="/Tools/GATK/dbsnp_137.hg19.vcf"
 #
-# Mark for duplicates
-# In case of exome sequencing (not targetted sequencing) we want to mark and remove duplicates.
-# Yes = 1 ; No = 0
-markduplicates="0"
-#
 # Run nproc and get the numbers of all installed CPU
 #threads=$(nproc --all)
 # Use less processors to allow other tasks to run (n-1 here)
@@ -100,9 +110,9 @@ dir2="$2"
 config="$3"
 
 # Check paths and trailing / in directories
-if [ -z $dir -o -z "$dir2" ]
+if [ -z "$dir" -o -z "$dir2" ]
 then
-    echo "usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
+    echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
@@ -116,9 +126,16 @@ then
     dir2=${dir2%?}
 fi
 
-if [ ! -z "$config" ]
+if [ -n "$config" ]
 then
-    source "$config"
+    if [ ${config: -4} == ".ini" ]
+    then
+        source "$config"
+    else
+        echo "Invalid config file detected. Is it an .ini file?"
+        echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
+        exit
+    fi
 fi
 
 # Displaying variables to shell
@@ -138,6 +155,7 @@ echo "1000 genomes phase 1 database, located at $onekGph1"
 echo ""
 echo "SNPs will be filtered using:"
 echo "dbSNP database, located at $dbSNP"
+echo "SNPs filtering options: $filterparameters"
 echo ""
 echo "Regions of interest are defined in $regions"
 echo ""
@@ -156,7 +174,12 @@ echo "HARDWARE"
 echo "This computer have" `nproc --all` "CPUs installed, $threads CPUs will be used"
 echo "$mem GB of memory will be allocated to java"
 echo ""
-echo "You can change these parameters by using a custom config file"
+if [ -z "$config" ]
+then
+    echo "You can change these parameters by using a custom config file"
+else
+    echo "You are using a custom config file: $config"
+fi
 
 # Starting script.
 echo ""
@@ -228,6 +251,7 @@ do
     matefixedbai=`echo $i | sed 's/.trim.sorted.nodup.bam/.realigned.fixed.bai/g'`
     recal_data=`echo $i | sed 's/.trim.sorted.nodup.bam/.recal.grp/g'`
     recal=`echo $i | sed 's/.trim.sorted.nodup.bam/.realigned.fixed.recal.bam/g'`
+    recalbai=`echo $i | sed 's/.trim.sorted.nodup.bam/.realigned.fixed.recal.bai/g'`
     rawSNP=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.rawsnp.vcf/g'`
     snpmetrics=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.snpmetrics/g'`
     filteredSNP=`echo $i | sed 's/_L001_001.trim.sorted.nodup.bam/.filteredsnps.vcf/g'`
@@ -269,7 +293,7 @@ echo ""
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics
 
     # Filter SNPs
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5 " --filterName "LowCoverage" --filterExpression "QUAL < 30.0 " --filterName "VeryLowQual" --filterExpression "QUAL > 30.0 && QUAL < 50.0 " --filterName "LowQual" --filterExpression "QD < 1.5 " --filterName "LowQD" --filterExpression "FS > 150 " --filterName "StrandBias"
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ >= 30.0 && MQ < 40.0 || FS > 50.0 && FS <= 60 || HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5.0" --filterName "LowCoverage" --filterExpression "DP >= 5.0 && DP < 10.0" --filterName "ShallowCoverage" --filterExpression "QUAL < 30.0" --filterName "VeryLowQual" --filterExpression "QUAL >= 30.0 && QUAL < 50.0" --filterName "LowQual" --filterExpression "QD < 2.0" --filterName "LowQD" --filterExpression "FS > 60.0" --filterName "HighFSScore" --filterExpression "FS > 50.0 && FS <= 60" --filterName "MedFSScore" --filterExpression "HaplotypeScore > 13.0" --filterName "HighHaplotypeScore" --filterExpression "HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "MedHighHaplotypeScore" --filterExpression "MQ < 40.0" --filterName "LowMQ" --filterExpression "MQ >= 30.0 && MQ < 40.0" --filterName "MedMQ" --filterExpression "MQRankSum < -12.5" --filterName "LowMQRankSum" --filterExpression "ReadPosRankSum < -8.0" --filterName "LowReadPosRankSum"
 
 echo ""
 echo "-- SNPs called --"
@@ -318,11 +342,12 @@ echo "----------------"
     rm $dir2/$recal_data
     rm $dir2/$matefixed
     rm $dir2/$matefixedbai
-#    rm $dir2/$recal ## Last .bam file, after al cleanup steps. Will be used to call SNPs, better to keep it
-    rm $dir2/$rawSNP
-    rm $dir2/"$rawSNP".idx
-#    rm $dir2/$filteredSNP ## SNPs file after filter step. Will be used for annotations, better to keep it
-#    rm $dir2/"$filteredSNP".idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
+#    rm $dir2/$recal ## Last .bam file, after all cleanup steps. Will be used to call SNPs, better to keep it
+#    rm $dir2/$recalbai ## .bai for $recal. To be removed or kept depending of $recal
+#    rm $dir2/$rawSNP ## Raw SNPs file. Better to keep it if we want to change filter parameters.
+#    rm $dir2/"$rawSNP".idx ## .idx SNPs index file of $rawSNP. To be removed or kept depending of $rawSNP
+#    rm $dir2/$filteredSNP ## SNPs file after filter step. Used for annotations, better to keep it
+#    rm $dir2/"$filteredSNP"## .idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
 #    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
     rm $dir2/$coverage ## Huge file! not sure if we should keep it.
     rm -rf $dir2/tmp ## Temporary folder used by Java
@@ -360,7 +385,10 @@ tar --remove-files -C $dir2 -pczf $dir2/ALL_SNPs.tar.gz ALL_SNPs
 echo ""
 echo "-- Archive ready at $dir2/ALL_SNPs.tar.gz --"
 
-# That's all folks
+# Send you an email when it's ready, nice is'nt it?
+sendemail -f $fromemail -t $email -u "`basename $dir2` #SNPCalling done" -m "`date`: `basename $dir2` SNPs calling job is completed." ## -a $dir2/ALL_SNPs.tar.gz ## Optional -a parameter: add a file as attachment (/!\ size)
+
+# That's all folks!
 echo ""
 echo "                       \|/"
 echo "                      (@ @)"

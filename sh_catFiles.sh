@@ -1,4 +1,15 @@
 #!/bin/bash
+#
+# Usage: sh_catFiles.sh </path/to/original/fastq(.gz)/folder> </path/to/merged/fastq(.gz)/folder>
+#
+##############################################################
+##                      Description                         ##
+##############################################################
+#
+# This script will merge all fastq(.gz) from a folder to fastq(.gz) with the same
+# name in a second folder.
+#
+##
 
 # Get fastq directory
 dir="$1"
@@ -7,7 +18,7 @@ dir="$1"
 dir2="$2"
 
 # Check paths and trailing / in directories
-if [ -z $dir ]
+if [ -z "$dir" ]
 then
     echo "usage: sh_catFiles.sh <.fastq(.gz) folder> [destination folder]"
     exit
@@ -37,7 +48,7 @@ then
     echo "No .fastq or .fastq.gz files are present in $dir/"
     exit
 fi
-if [ ! -z "${fastqgz}" ] && [ ! -z "${fastq}" ]
+if [ -n "${fastqgz}" ] && [ -n "${fastq}" ]
 then
     echo ""
     echo "Both .fastq and .fastq.gz files are present in $dir/"
@@ -45,11 +56,11 @@ then
     gzip $dir/*.fastq
     fileext=".fastq.gz"
 fi
-if [ ! -z "${fastqgz}" ] && [ -z "${fastq}" ]
+if [ -n "${fastqgz}" ] && [ -z "${fastq}" ]
 then
     fileext=".fastq.gz"
 fi
-if [ ! -z "${fastq}" ] && [ -z "${fastqgz}" ]
+if [ -n "${fastq}" ] && [ -z "${fastqgz}" ]
 then
     fileext=".fastq"
 fi

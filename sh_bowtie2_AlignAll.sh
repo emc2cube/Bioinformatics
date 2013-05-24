@@ -1,15 +1,19 @@
 #!/bin/bash
 #
-# usage: sh_bowtie2_AlignAll.sh </path/to/fastq/files/> </path/to/sam/files/> [/path/to/config/file.ini]
+# Usage: sh_bowtie2_AlignAll.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> [/path/to/config/file.ini]
 #
-## Description ##
+##############################################################
+##                      Description                         ##
+##############################################################
 #
 # This script will process fastq files to .sam files
 # First it will trim fastqs with Jason script to remove sequences in the adapter region.
 # It will also generate a merged file of all individual samples to be aligned.
 # Finally trimmed sequences are aligned to a reference genome using bowtie2
 #
-## Configurable variables ##
+##############################################################
+##                  Configurable variables                  ##
+##############################################################
 #
 # bowtie2 indexed reference genome location
 bt_refgenome="/Tools/RefGenomes/gatk_2.3_ucsc_hg19/gatk_2.3_ucsc_hg19"
@@ -56,7 +60,7 @@ config="$3"
 # Check paths and trailing / in directories
 if [ -z "$dir" -o -z "$dir2" ]
 then
-    echo "usage: sh_bowtie2_AlignAll.sh <.fastq(.gz) folder> <destination folder> [/path/to/config/file.ini]"
+    echo "Usage: sh_bowtie2_AlignAll.sh <.fastq(.gz) folder> <destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
@@ -70,9 +74,16 @@ then
     dir2=${dir2%?}
 fi
 
-if [ ! -z "$config" ]
+if [ -n "$config" ]
 then
-    source "$config"
+    if [ ${config: -4} == ".ini" ]
+    then
+        source "$config"
+    else
+        echo "Invalid config file detected. Is it an .ini file?"
+        echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
+        exit
+    fi
 fi
 
 # Test if sequence files are .fastq or .fastq.gz
@@ -84,7 +95,7 @@ then
     echo "No .fastq or .fastq.gz files are present in $dir/"
     exit
 fi
-if [ ! -z "${fastqgz}" ] && [ ! -z "${fastq}" ]
+if [ -n "${fastqgz}" ] && [ -n "${fastq}" ]
 then
     echo ""
     echo "Both .fastq and .fastq.gz files are present in $dir/"
@@ -92,11 +103,11 @@ then
     gzip $dir/*.fastq
     fileext=".fastq.gz"
 fi
-if [ ! -z "${fastqgz}" ] && [ -z "${fastq}" ]
+if [ -n "${fastqgz}" ] && [ -z "${fastq}" ]
 then
     fileext=".fastq.gz"
 fi
-if [ ! -z "${fastq}" ] && [ -z "${fastqgz}" ]
+if [ -n "${fastq}" ] && [ -z "${fastqgz}" ]
 then
     fileext=".fastq"
 fi
@@ -122,7 +133,12 @@ then
 fi
 echo "This computer have" $(nproc --all) "CPUs installed, $threads CPUs will be used"
 echo ""
-echo "You can change these parameters by using a custom config file"
+if [ -z "$config" ]
+then
+    echo "You can change these parameters by using a custom config file"
+else
+    echo "You are using a custom config file: $config"
+fi
 
 # Initialize
 [ -f $dir2/temp1 ] && rm $dir2/temp1

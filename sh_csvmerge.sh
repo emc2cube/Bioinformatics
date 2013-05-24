@@ -1,12 +1,24 @@
 #!/bin/bash
+#
+# Usage: sh_csvmerge.sh </path/to/.csv/containing/folder> [/path/to/destination/folder]
+#
+##############################################################
+##                      Description                         ##
+##############################################################
+#
+# This script will merge .snps.exome_summary.csv file to a new one, adding the sample
+# name in the first column, and fixing GATK header columns in the resulting ANNOVAR
+# .snps.exome_summary.csv file.
+#
+##
 
 dir="$1"
 out="$2"
 
 # Check paths and trailing / in directories
-if [ -z $dir ]
+if [ -z "$dir" ]
 then
-    echo "usage: sh_csvmerge.sh <.csv folder> [destination folder]"
+    echo "Usage: sh_csvmerge.sh </path/to/.csv/containing/folder> [/path/to/destination/folder]"
     exit
 fi
 
@@ -30,7 +42,7 @@ fi
 csvfiles=`ls $dir/ | grep .snps.exome_summary.csv`
 header=`ls $dir | grep .snps.exome_summary.csv | head -1`
 
-echo "Sample,`head -1 $dir/$header`" > $out/All_SNPs_merged.csv
+echo "Sample,`head -1 $dir/$header`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $out/All_SNPs_merged.csv
 
 for i in $csvfiles
 do

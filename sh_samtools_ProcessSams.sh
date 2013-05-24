@@ -1,15 +1,19 @@
 #!/bin/bash
 #
-# usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]
+# Usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]
 #
-## Description ##
+##############################################################
+##                      Description                         ##
+##############################################################
 #
 # This script will process .sam files and convert them to .bam files.
 # Optional: reads can be filtered on their MapQ score to remove poorly aligned reads.
 # These .bam files are then sorted and indexed.
 # Intermediate files are deleted to save space.
 #
-## Configurable variables ##
+##############################################################
+##                  Configurable variables                  ##
+##############################################################
 #
 # Filter by MapQ quality score to remove poor aligned reads.
 # samtools defaut is 0 (no filtering), 10<MapQ<20 is advised
@@ -23,9 +27,9 @@ dir="$1"
 # Get config file location
 config="$2"
 
-if [ -z $dir ]
+if [ -z "$dir" ]
 then
-    echo "usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]"
+    echo "Usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]"
     exit
 fi
 
@@ -34,9 +38,16 @@ then
     dir=${dir%?}
 fi
 
-if [ ! -z "$config" ]
+if [ -n "$config" ]
 then
-    source "$config"
+    if [ ${config: -4} == ".ini" ]
+    then
+        source "$config"
+    else
+        echo "Invalid config file detected. Is it an .ini file?"
+        echo "Usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]"
+        exit
+    fi
 fi
 
 # Displaying variables to shell
@@ -55,7 +66,12 @@ else
     fi
 fi
 echo ""
-echo "You can change these parameters by using a custom config file"
+if [ -z "$config" ]
+then
+    echo "You can change these parameters by using a custom config file"
+else
+    echo "You are using a custom config file: $config"
+fi
 
 # Get sam files list
 sam_files=`ls $dir | grep .sam`
