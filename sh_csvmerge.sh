@@ -42,7 +42,7 @@ fi
 csvfiles=`ls $dir/ | grep .snps.exome_summary.csv`
 header=`ls $dir | grep .snps.exome_summary.csv | head -1`
 
-echo "Sample,`head -1 $dir/$header`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $out/All_SNPs_merged.csv
+echo "Sample,`head -1 $dir/$header | sed s/,Otherinfo//g`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $out/All_SNPs_merged.csv
 
 for i in $csvfiles
 do
