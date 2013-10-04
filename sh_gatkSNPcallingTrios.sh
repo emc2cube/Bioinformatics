@@ -19,8 +19,7 @@
 ##                  Configurable variables                  ##
 ##############################################################
 #
-# PED file to specify family relations if available
-ped=""
+ped="/media/Haloplex/Trios/trios.ped"
 #
 # Picard-tools location
 # example:
@@ -207,13 +206,13 @@ dupfiles=`ls $dir/ --hide=*.bai | grep .sorted.bam`
 
 for i in $dupfiles
 do
-    echo "Processing" $i
-    out=`echo $i | sed 's/.bam/.nodup.bam/g'`
-    metrics=`echo $i | sed "s/.sorted.bam/.nodup.metrics/g"`
-    stdout=`echo $i | sed "s/.sorted.bam/.noduplog/g"`
+    echo "Processing" ${i}
+    out=`echo ${i} | sed 's/.bam/.nodup.bam/g'`
+    metrics=`echo ${i} | sed "s/.sorted.bam/.nodup.metrics/g"`
+    stdout=`echo ${i} | sed "s/.sorted.bam/.noduplog/g"`
 
     # Use picard tools MarkDuplicates with removal of duplicates and index creation options.
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/MarkDuplicates.jar I=$dir/$i O=$dir2/$out METRICS_FILE=$dir2/$logs/$metrics REMOVE_DUPLICATES=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true 2>$dir2/$logs/$stdout
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/MarkDuplicates.jar I=$dir/${i} O=$dir2/$out METRICS_FILE=$dir2/$logs/$metrics REMOVE_DUPLICATES=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true 2>$dir2/$logs/$stdout
 done
 echo ""
 echo "-- Duplicates removed --"
@@ -225,10 +224,10 @@ echo ""
 mvfiles=`ls $dir/ | grep .sorted.bam`
 for i in $mvfiles
 do
-    out=`echo $i | sed 's/.bam/.nodup.bam/g'`
+    out=`echo ${i} | sed 's/.bam/.nodup.bam/g'`
 
     # Copy files
-    cp $dir/$i $dir2/$out
+    cp $dir/${i} $dir2/$out
 done
 echo ""
 echo "-- Files copied --"
@@ -244,30 +243,29 @@ nodupfiles=`ls $dir2/ --hide=*.bai | grep .nodup.bam`
 for i in $nodupfiles
 do
 # Generate file names from sample name
-    echo "Processing" $i
-    nodupbai=`echo $i | sed 's/.bam/.bai/g'`
-    intervals=`echo $i | sed 's/.sorted.nodup.bam/.intervals/g'`
-    realigned=`echo $i | sed 's/.sorted.nodup.bam/.realigned.bam/g'`
-    realignedbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.bai/g'`
-    matefixed=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.bam/g'`
-    matefixedbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.bai/g'`
-    recal_data=`echo $i | sed 's/.sorted.nodup.bam/.recal.grp/g'`
-    recal=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bam/g'`
-    recalbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bai/g'`
-    rawSNP=`echo $i | sed 's/.sorted.nodup.bam/.rawsnp.vcf/g'`
-    snpmetrics=`echo $i | sed 's/.sorted.nodup.bam/.snpmetrics/g'`
-    filteredSNP=`echo $i | sed 's/.sorted.nodup.bam/.filteredsnps.vcf/g'`
-    annovarfile=`echo $i | sed 's/.sorted.nodup.bam/.annovar/g'`
-#    snpsfolder=`echo $i | awk -F. '{print $1}'`
-    snpsfolder=`echo $i | sed 's/.sorted.nodup.bam//g'`
-    snpssummary=`echo $i | sed 's/.sorted.nodup.bam/.snps/g'`
-    coverage=`echo $i | sed 's/.sorted.nodup.bam/.coverage/g'`
+    echo "Processing" ${i}
+    nodupbai=`echo ${i} | sed 's/.bam/.bai/g'`
+    intervals=`echo ${i} | sed 's/.sorted.nodup.bam/.intervals/g'`
+    realigned=`echo ${i} | sed 's/.sorted.nodup.bam/.realigned.bam/g'`
+    realignedbai=`echo ${i} | sed 's/.sorted.nodup.bam/.realigned.bai/g'`
+    matefixed=`echo ${i} | sed 's/.sorted.nodup.bam/.realigned.fixed.bam/g'`
+    matefixedbai=`echo ${i} | sed 's/.sorted.nodup.bam/.realigned.fixed.bai/g'`
+    recal_data=`echo ${i} | sed 's/.sorted.nodup.bam/.recal.grp/g'`
+    recal=`echo ${i} | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bam/g'`
+    recalbai=`echo ${i} | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bai/g'`
+    rawSNP=`echo ${i} | sed 's/_L001_001.sorted.nodup.bam/.rawsnp.vcf/g'`
+    snpmetrics=`echo ${i} | sed 's/_L001_001.sorted.nodup.bam/.snpmetrics/g'`
+    filteredSNP=`echo ${i} | sed 's/_L001_001.sorted.nodup.bam/.filteredsnps.vcf/g'`
+    snpsfolder=`echo ${i} | sed 's/_L001_001.sorted.nodup.bam//g'`
+    coverage=`echo ${i} | sed 's/_L001_001.sorted.nodup.bam/.coverage/g'`
+
+mkdir -p $dir2/$snpsfolder/
 
     # Determining (small) suspicious intervals which are likely in need of realignment
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/${i} -o $dir2/${i}ntervals -known $millsgold -known $onekGph1 -L $regions -nt $threads -ped $ped
 
     # Running the realigner over those intervals
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/${i} -o $dir2/$realigned -targetIntervals $dir2/${i}ntervals -ped $ped
 
     # When using paired end data, the mate information must be fixed, as alignments may change during the realignment process
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/FixMateInformation.jar I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
@@ -291,7 +289,6 @@ echo ""
 echo "-- Calling SNPs --"
 echo ""
 
-    date
     echo "Processing" $recal
     # Produce raw SNP calls
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics -ped $ped
@@ -301,28 +298,6 @@ echo ""
 
 echo ""
 echo "-- SNPs called --"
-
-echo ""
-echo "-- Annotate SNPs using annovar --"
-echo ""
-
-    echo "Processing" $filteredSNP
-
-    # Annotate using annovar
-    # Convert to annovar format from GATK .vcf file
-    convert2annovar.pl --format vcf4 --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
-
-    # Annotate using annovar
-    mkdir -p $dir2/$snpsfolder
-    summarize_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb -outfile $dir2/$snpsfolder/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
-
-    # Fixing headers to add back sample names in annovar csv output files
-    sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.exome_summary.csv > $dir2/$snpsfolder/$snpssummary.exome_summary_fixed.csv
-    sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.genome_summary.csv > $dir2/$snpsfolder/$snpssummary.genome_summary_fixed.csv
-
-
-echo ""
-echo "-- Annotation done. --"
 
 echo ""
 echo "-- Computing coverage --"
@@ -338,17 +313,17 @@ echo ""
 echo "-- Coverage computed --"
 
 # Generate list of mutations in ACMG genes
-#sh_ACMGfilter.sh $dir2/$snpsfolder $dir2/$snpsfolder
+sh_ACMGfilter.sh $dir2/$snpsfolder $dir2/$snpsfolder
 
 echo ""
 echo "-- Sample $snpsfolder is done, results are in $dir2/$snpsfolder --"
 echo "----------------"
 
 # Remove indermediate files
-    rm $dir2/$i
+    rm $dir2/${i}
     [ -f $dir2/$nodupbai ] && rm $dir2/$nodupbai
-    [ -f $dir2/$i.bai ] && rm $dir2/$i.bai
-    rm $dir2/$intervals
+    [ -f $dir2/${i}.bai ] && rm $dir2/${i}.bai
+    rm $dir2/${i}ntervals
     rm $dir2/$realigned
     rm $dir2/$realignedbai
     rm $dir2/$recal_data
@@ -359,10 +334,52 @@ echo "----------------"
 #    rm $dir2/$rawSNP ## Raw SNPs file. Better to keep it if we want to change filter parameters.
 #    rm $dir2/"$rawSNP".idx ## .idx SNPs index file of $rawSNP. To be removed or kept depending of $rawSNP
 #    rm $dir2/$filteredSNP ## SNPs file after filter step. Used for annotations, better to keep it
-#    rm $dir2/"$filteredSNP".idx ## .idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
-#    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
+#    rm $dir2/"$filteredSNP"## .idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
     rm $dir2/$coverage ## Huge file! not sure if we should keep it.
+
+done
+
+# Get files for family association
+filteredtrios=`ls $dir2/ --hide=*.idx | grep .filteredsnps.vcf | awk -F. '{print $1}' | sed s/.$// | uniq` # Get sample name without the last character (A,B or C for trios)
+
+for i in $filteredtrios
+do
+
+echo ""
+echo "Processing Trio ${i}"
+echo ""
+mkdir -p $dir2/Trio_${i}
+
+# Create a vcf file by Trio
+java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T CombineVariants -R $fasta_refgenome --variant $dir2/${i}A.filteredsnps.vcf --variant $dir2/${i}B.filteredsnps.vcf --variant $dir2/${i}C.filteredsnps.vcf -o $dir2/Trio_${i}/Trio_${i}.vcf -L $regions -ped $ped -nt $threads
+
+# Look for mutation segregation
+java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PhaseByTransmission -R $fasta_refgenome -V $dir2/Trio_${i}/Trio_${i}.vcf -o $dir2/Trio_${i}/Trio_${i}_phased.vcf -ped $ped -L $regions
+
+echo ""
+echo "-- Annotating Trios $filteredtrios SNPs using annovar --"
+echo ""
+    phasedSNP="Trio_${i}_phased.vcf"
+    annovarfile=`echo $phasedSNP | sed 's/.vcf/.annovar/g'`
+    snpssummary=`echo $phasedSNP | sed 's/.vcf/.snps/g'`
+
+    # Annotate using annovar
+    # Convert to annovar format from GATK .vcf file
+    convert2annovar.pl --format vcf4 --includeinfo $dir2/Trio_${i}/$phasedSNP --outfile $dir2/Trio_${i}/$annovarfile
+
+    # Annotate using annovar
+    summarize_annovar.pl --buildver hg19 $dir2/Trio_${i}/$annovarfile $annovar/humandb -outfile $dir2/Trio_${i}/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
+
+    # Fixing headers to add back sample names in annovar csv output files
+    sed "1s/Otherinfo/`cat $dir2/Trio_${i}/$phasedSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/Trio_${i}/$snpssummary.exome_summary.csv > $dir2/Trio_${i}/$snpssummary.exome_summary_fixed.csv
+    sed "1s/Otherinfo/`cat $dir2/Trio_${i}/$phasedSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/Trio_${i}/$snpssummary.genome_summary.csv > $dir2/Trio_${i}/$snpssummary.genome_summary_fixed.csv
+
+# Remove indermediate files
+#    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
     rm -rf $dir2/tmp ## Temporary folder used by Java
+
+echo ""
+echo "-- Annotation done. --"
 
 done
 
@@ -376,20 +393,14 @@ echo "-- Final processing of all SNPs files --"
 
 # Listing all SNPs folders
 
-archive=`find $dir2/* -maxdepth 0 -mindepth 0 -type d -not -name $logs`
+archive=`find $dir2/Trio_* -maxdepth 0 -mindepth 0 -type d -not -name $logs`
 
 mkdir -p $dir2/ALL_SNPs/
-mkdir -p $dir2/ALL_CSVs/
-
-# Merging all exome_summary files into a All_SNPs_merged.csv file
-cp $dir2/*/*.snps.exome_summary.csv $dir2/ALL_CSVs/
-sh_csvmerge.sh $dir2/ALL_CSVs/ $dir2/ALL_SNPs/
-[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
 
 # Creating and archive of all SNPs folders for easy download
 for i in $archive
 do
-    cp -rf $i $dir2/ALL_SNPs/`basename $i`
+    cp -rf ${i} $dir2/ALL_SNPs/`basename ${i}`
 done
 
 tar --remove-files -C $dir2 -pczf $dir2/ALL_SNPs.tar.gz ALL_SNPs
@@ -397,8 +408,8 @@ tar --remove-files -C $dir2 -pczf $dir2/ALL_SNPs.tar.gz ALL_SNPs
 echo ""
 echo "-- Archive ready at $dir2/ALL_SNPs.tar.gz --"
 
-# Send you an email when it's ready, nice isn't it?
-sendemail -f $fromemail -t $email -u "`basename $(dirname $dir2)` #SNPCalling done" -m "`date`: `basename $(dirname $dir2)` SNPs calling job is completed." ## -a $dir2/ALL_SNPs.tar.gz ## Optional -a parameter: add a file as attachment (/!\ size)
+# Send you an email when it's ready, nice is'nt it?
+sendemail -f $fromemail -t $email -u "`basename $dir2` #SNPCalling done" -m "`date`: `basename $dir2` SNPs calling job is completed." ## -a $dir2/ALL_SNPs.tar.gz ## Optional -a parameter: add a file as attachment (/!\ size)
 
 # That's all folks!
 echo ""

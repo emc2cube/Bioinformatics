@@ -1,13 +1,12 @@
 #!/bin/bash
 #
-# Usage: sh_gatkCoverage.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
-#
 ##############################################################
 ##                      Description                         ##
 ##############################################################
 #
-# This script will process .bam files and compute coverage information.
-# This function is already included in sh_gatkSNPcalling.sh
+# This script will process .bam files and compute coverage information
+#
+# usage: sh_gatkCoverage.sh <.bam folder> <destination folder> [/path/to/config/file.ini]
 #
 ##############################################################
 ##                  Configurable variables                  ##
@@ -64,9 +63,9 @@ dir2="$2"
 config="$3"
 
 # Check paths and trailing / in directories
-if [ -z "$dir" -o -z "$dir2" ]
+if [ -z $dir -o -z "$dir2" ]
 then
-    echo "Usage: sh_gatkCoverage.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]"
+    echo "usage: sh_gatkCoverage.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
     exit
 fi
 
@@ -87,7 +86,7 @@ then
         source "$config"
     else
         echo "Invalid config file detected. Is it an .ini file?"
-        echo "Usage: sh_gatkCoverage.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]"
+        echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
         exit
     fi
 fi
@@ -198,6 +197,10 @@ echo "-- Archive ready at $dir2/ALL_SNPs.tar.gz --"
 echo ""
 echo "                       \|/"
 echo "                      (@ @)"
+echo ".---------------oOO----(_)----OOo---------------."
+echo "|             ALL SAMPLES PROCESSED             |"
+echo ".-----------------------------------------------."
+@)"
 echo ".---------------oOO----(_)----OOo---------------."
 echo "|             ALL SAMPLES PROCESSED             |"
 echo ".-----------------------------------------------."

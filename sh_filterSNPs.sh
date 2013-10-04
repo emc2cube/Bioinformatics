@@ -1,17 +1,19 @@
 #!/bin/bash
 #
-# Usage: sh_filterSNPs.sh </path/to/.vcf/files> </path/to/save/filtered.vcf/files> [/path/to/config/file.ini]
-#
 ##############################################################
 ##                      Description                         ##
 ##############################################################
 #
-# This script will process GATK .vcf files
+# This script will process .bam files
+# Optional: Will first remove duplicate reads (edit options).
 # This script will, for all samples:
-# - filter SNPs.
+# - perform a local realignment around known indels.
+# - perform a quality score recalibration.
+# - call SNPs.
 # - annotate using annovar
 # - merge csv files and do some cleaning for an easy downloadable file
-# This function is already included in sh_gatkSNPcalling.sh
+#
+# usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]
 #
 ##############################################################
 ##                  Configurable variables                  ##
@@ -98,7 +100,7 @@ dir2="$2"
 config="$3"
 
 # Check paths and trailing / in directories
-if [ -z "$dir" -o -z "$dir2" ]
+if [ -z $dir -o -z "$dir2" ]
 then
     echo "usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
     exit

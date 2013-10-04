@@ -4,8 +4,9 @@
 #
 ## Description ##
 #
-# Will call sh_bowtie2_AlignAll.sh to convert fastq to sorted and indexed .bam
-# Will then launch sh_gatkSNPcalling.sh to call SNPs with GATK and annotate them with ANNOVAR.
+# Will call sh_bowtie2_AlignAll.sh to convert fastq to .sam
+# then sh_samtools_ProcessSams.sh to convert .sam into sorted and indexed .bam
+# Finally will launch sh_gatkSNPcalling.sh to call SNPs with GATK and annotate them with ANNOVAR.
 #
 ##
 
@@ -23,7 +24,4 @@ then
 fi
 
 sh_bowtie2_AlignAll.sh "$1" "$2" "$4"
-sh_gatkSNPcalling.sh "$2" "$3" "$4"
-AlignAll.sh "$1" "$2" "$4"
-sh_samtools_ProcessSams.sh "$2" "$4"
-sh_gatkSNPcalling.sh "$2" "$3" "$4"
+sh_gatkSNPcallingTrios.sh "$2" "$3" "$4"

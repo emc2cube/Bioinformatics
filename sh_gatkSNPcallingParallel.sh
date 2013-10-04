@@ -1,5 +1,7 @@
 #!/bin/bash
 #
+# Usage: sh_gatkSNPcalling.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
+#
 ##############################################################
 ##                      Description                         ##
 ##############################################################
@@ -12,15 +14,25 @@
 # - call SNPs.
 # - annotate using annovar
 # - merge csv files and do some cleaning for an easy downloadable file
-#
-# usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]
+# As this script will be the last one from the workflow, an option exist to send an email when the job is complete.
 #
 ##############################################################
 ##                  Configurable variables                  ##
 ##############################################################
 #
-# PED file to specify family relations if available
-ped=""
+# Mark for duplicates
+# In case of exome sequencing (not targetted sequencing) we want to mark and remove duplicates.
+# Yes = 1 ; No = 0
+markduplicates="0"
+#
+# Send an email to this address when a job is done. Separate by commas for multiple recipients.
+# default no email sent
+email="/dev/null"
+#
+# Send this email as if it was from a custom address
+# Change it to use it with IFTTT.com for example
+# default is user@host
+fromemail="`id -un`@`hostname -A`"
 #
 # Picard-tools location
 # example:
@@ -71,11 +83,6 @@ onekGph1="/media/Tools/GATK/1000G_phase1.indels.hg19.vcf"
 # dbSNP="/Tools/GATK/dbsnp_137.hg19.vcf"
 dbSNP="/Tools/GATK/dbsnp_137.hg19.vcf"
 #
-# Mark for duplicates
-# In case of exome sequencing (not targetted sequencing) we want to mark and remove duplicates.
-# Yes = 1 ; No = 0
-markduplicates="0"
-#
 # Run nproc and get the numbers of all installed CPU
 #threads=$(nproc --all)
 # Use less processors to allow other tasks to run (n-1 here)
@@ -89,20 +96,11 @@ mem="24"
 # log folder
 logs="logs"
 #
-# Send an email to this address when a job is done. Separate by commas for multiple recipients.
-# default no email sent
-email="/dev/null"
-#
-# Send this email as if it was from a custom address
-# Change it to use it with IFTTT.com for example
-# default is user@host
-fromemail="`id -un`@`hostname -A`"
-#
 ##############################################################
 ## Setup done. You should not need to edit below this point ##
 ##############################################################
 
-# Get bam directory
+# Get fastq directory
 dir="$1"
 
 # Get destination directory
@@ -112,7 +110,7 @@ dir2="$2"
 config="$3"
 
 # Check paths and trailing / in directories
-if [ -z $dir -o -z "$dir2" ]
+if [ -z "$dir" -o -z "$dir2" ]
 then
     echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
     exit
@@ -203,7 +201,7 @@ echo ""
 echo "-- Marking duplicates --"
 echo ""
 # Get files for duplicates marking
-dupfiles=`ls $dir/ --hide=*.bai | grep .sorted.bam`
+#dupfiles=`ls $dir/ --hide=*.bai | grep .sorted.bam`
 
 for i in $dupfiles
 do
@@ -234,12 +232,14 @@ echo ""
 echo "-- Files copied --"
 fi
 
+# GATK
+
 # Perform local realignment around known indels
 echo ""
 echo "-- Local realignment around indels --"
 echo ""
 # Get files for local realignment
-nodupfiles=`ls $dir2/ --hide=*.bai | grep .nodup.bam`
+#nodupfiles=`ls $dir2/ --hide=*.bai | grep .nodup.bam`
 
 for i in $nodupfiles
 do
@@ -254,20 +254,13 @@ do
     recal_data=`echo $i | sed 's/.sorted.nodup.bam/.recal.grp/g'`
     recal=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bam/g'`
     recalbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bai/g'`
-    rawSNP=`echo $i | sed 's/.sorted.nodup.bam/.rawsnp.vcf/g'`
-    snpmetrics=`echo $i | sed 's/.sorted.nodup.bam/.snpmetrics/g'`
-    filteredSNP=`echo $i | sed 's/.sorted.nodup.bam/.filteredsnps.vcf/g'`
-    annovarfile=`echo $i | sed 's/.sorted.nodup.bam/.annovar/g'`
-#    snpsfolder=`echo $i | awk -F. '{print $1}'`
-    snpsfolder=`echo $i | sed 's/.sorted.nodup.bam//g'`
-    snpssummary=`echo $i | sed 's/.sorted.nodup.bam/.snps/g'`
-    coverage=`echo $i | sed 's/.sorted.nodup.bam/.coverage/g'`
+    coverage=`echo $i | sed 's/_L001_001.sorted.nodup.bam/.coverage/g'`
 
     # Determining (small) suspicious intervals which are likely in need of realignment
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads
 
     # Running the realigner over those intervals
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals
 
     # When using paired end data, the mate information must be fixed, as alignments may change during the realignment process
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/FixMateInformation.jar I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
@@ -281,48 +274,11 @@ echo ""
 
     echo "Processing" $matefixed
     # Quality score recalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions -ped $ped
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal
 
 echo ""
 echo "-- Recalibration done --"
-
-echo ""
-echo "-- Calling SNPs --"
-echo ""
-
-    date
-    echo "Processing" $recal
-    # Produce raw SNP calls
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics -ped $ped
-
-    # Filter SNPs
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ >= 30.0 && MQ < 40.0 || FS > 50.0 && FS <= 60 || HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5.0" --filterName "LowCoverage" --filterExpression "DP >= 5.0 && DP < 10.0" --filterName "ShallowCoverage" --filterExpression "QUAL < 30.0" --filterName "VeryLowQual" --filterExpression "QUAL >= 30.0 && QUAL < 50.0" --filterName "LowQual" --filterExpression "QD < 2.0" --filterName "LowQD" --filterExpression "FS > 60.0" --filterName "HighFSScore" --filterExpression "FS > 50.0 && FS <= 60" --filterName "MedFSScore" --filterExpression "HaplotypeScore > 13.0" --filterName "HighHaplotypeScore" --filterExpression "HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "MedHighHaplotypeScore" --filterExpression "MQ < 40.0" --filterName "LowMQ" --filterExpression "MQ >= 30.0 && MQ < 40.0" --filterName "MedMQ" --filterExpression "MQRankSum < -12.5" --filterName "LowMQRankSum" --filterExpression "ReadPosRankSum < -8.0" --filterName "LowReadPosRankSum" -ped $ped
-
-echo ""
-echo "-- SNPs called --"
-
-echo ""
-echo "-- Annotate SNPs using annovar --"
-echo ""
-
-    echo "Processing" $filteredSNP
-
-    # Annotate using annovar
-    # Convert to annovar format from GATK .vcf file
-    convert2annovar.pl --format vcf4 --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
-
-    # Annotate using annovar
-    mkdir -p $dir2/$snpsfolder
-    summarize_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb -outfile $dir2/$snpsfolder/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
-
-    # Fixing headers to add back sample names in annovar csv output files
-    sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.exome_summary.csv > $dir2/$snpsfolder/$snpssummary.exome_summary_fixed.csv
-    sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.genome_summary.csv > $dir2/$snpsfolder/$snpssummary.genome_summary_fixed.csv
-
-
-echo ""
-echo "-- Annotation done. --"
 
 echo ""
 echo "-- Computing coverage --"
@@ -330,19 +286,10 @@ echo ""
 
     echo "Processing" $recal
     # Will compute all coverage informations needed
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions -ct 10 -ct 15 -ct 30 -ped $ped
-    # Copy the coverage summary file to SNP folder as it will be archived later for easy download
-    cp $dir2/$coverage".sample_summary" $dir2/$snpsfolder/
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions -ct 10 -ct 15 -ct 30
 
 echo ""
 echo "-- Coverage computed --"
-
-# Generate list of mutations in ACMG genes
-#sh_ACMGfilter.sh $dir2/$snpsfolder $dir2/$snpsfolder
-
-echo ""
-echo "-- Sample $snpsfolder is done, results are in $dir2/$snpsfolder --"
-echo "----------------"
 
 # Remove indermediate files
     rm $dir2/$i
@@ -356,49 +303,90 @@ echo "----------------"
     rm $dir2/$matefixedbai
 #    rm $dir2/$recal ## Last .bam file, after all cleanup steps. Will be used to call SNPs, better to keep it
 #    rm $dir2/$recalbai ## .bai for $recal. To be removed or kept depending of $recal
-#    rm $dir2/$rawSNP ## Raw SNPs file. Better to keep it if we want to change filter parameters.
-#    rm $dir2/"$rawSNP".idx ## .idx SNPs index file of $rawSNP. To be removed or kept depending of $rawSNP
-#    rm $dir2/$filteredSNP ## SNPs file after filter step. Used for annotations, better to keep it
-#    rm $dir2/"$filteredSNP".idx ## .idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
-#    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
     rm $dir2/$coverage ## Huge file! not sure if we should keep it.
-    rm -rf $dir2/tmp ## Temporary folder used by Java
+    rm -rf $dir2/tmp/* ## Temporary folder used by Java
 
 done
+
+# Call SNPs for all samples at once
+echo ""
+echo "-- Calling SNPs --"
+echo ""
+# Get files for SNPs calling
+gatkinput=`ls -d -1 $dir2/* --hide=*.bai | grep .realigned.fixed.recal.bam | sed ':a;N;$!ba;s/\n/ -I /g'`
+
+# Generate file names
+rawSNP="rawsnp.vcf"
+snpmetrics="GATK_SNPs_calling.snpmetrics"
+filteredSNP="filteredsnps.vcf"
+annovarfile="SNPs.annovar"
+snpsfolder="SNPs"
+snpssummary="summary.snps"
+coverage="SNPs.coverage"
+
+# Produce raw SNP calls
+#java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $gatkinput -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics
+java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T HaplotypeCaller -R $fasta_refgenome -I $gatkinput -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics
+
+
+echo ""
+echo "-- SNPs called --"
+
+echo ""
+echo "-- Filtering SNPs --"
+echo ""
+
+# Filter SNPs
+java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ >= 30.0 && MQ < 40.0 || FS > 50.0 && FS <= 60 || HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5.0" --filterName "LowCoverage" --filterExpression "DP >= 5.0 && DP < 10.0" --filterName "ShallowCoverage" --filterExpression "QUAL < 30.0" --filterName "VeryLowQual" --filterExpression "QUAL >= 30.0 && QUAL < 50.0" --filterName "LowQual" --filterExpression "QD < 2.0" --filterName "LowQD" --filterExpression "FS > 60.0" --filterName "HighFSScore" --filterExpression "FS > 50.0 && FS <= 60" --filterName "MedFSScore" --filterExpression "HaplotypeScore > 13.0" --filterName "HighHaplotypeScore" --filterExpression "HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "MedHighHaplotypeScore" --filterExpression "MQ < 40.0" --filterName "LowMQ" --filterExpression "MQ >= 30.0 && MQ < 40.0" --filterName "MedMQ" --filterExpression "MQRankSum < -12.5" --filterName "LowMQRankSum" --filterExpression "ReadPosRankSum < -8.0" --filterName "LowReadPosRankSum"
+
+echo ""
+echo "-- SNPs filtered--"
+
+echo ""
+echo "-- Annotate SNPs using annovar --"
+echo ""
+
+# Convert to annovar format from GATK .vcf file
+convert2annovar.pl --format vcf4 --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
+
+# Annotate using annovar
+mkdir -p $dir2/$snpsfolder
+summarize_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb -outfile $dir2/$snpsfolder/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
+
+echo ""
+echo "-- Annotation done. --"
+
+# Remove indermediate files
+#rm $dir2/$rawSNP ## Raw SNPs file. Better to keep it if we want to change filter parameters.
+#rm $dir2/"$rawSNP".idx ## .idx SNPs index file of $rawSNP. To be removed or kept depending of $rawSNP
+#rm $dir2/$filteredSNP ## SNPs file after filter step. Used for annotations, better to keep it
+#rm $dir2/"$filteredSNP"## .idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
+#rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
+rm -rf $dir2/tmp ## Temporary folder used by Java
+
+echo ""
+echo "-- Samples from $dir2 are done, results are in $dir2/$snpsfolder --"
+echo "----------------"
 
 # Final processing of result files
 echo ""
 echo "-- Final processing of all SNPs files --"
 
-[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
-[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
-[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
+# Generate list of mutations in ACMG genes
+sh_ACMGfilter.sh $dir2/$snpsfolder $dir2/$snpsfolder
 
-# Listing all SNPs folders
+# Fixing headers to add back sample names in annovar csv output files
+sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.exome_summary.csv > $dir2/$snpsfolder/$snpssummary.exome_summary_fixed.csv
+sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.genome_summary.csv > $dir2/$snpsfolder/$snpssummary.genome_summary_fixed.csv
 
-archive=`find $dir2/* -maxdepth 0 -mindepth 0 -type d -not -name $logs`
-
-mkdir -p $dir2/ALL_SNPs/
-mkdir -p $dir2/ALL_CSVs/
-
-# Merging all exome_summary files into a All_SNPs_merged.csv file
-cp $dir2/*/*.snps.exome_summary.csv $dir2/ALL_CSVs/
-sh_csvmerge.sh $dir2/ALL_CSVs/ $dir2/ALL_SNPs/
-[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
-
-# Creating and archive of all SNPs folders for easy download
-for i in $archive
-do
-    cp -rf $i $dir2/ALL_SNPs/`basename $i`
-done
-
-tar --remove-files -C $dir2 -pczf $dir2/ALL_SNPs.tar.gz ALL_SNPs
+# Creating and archive of SNPs folder for easy download
+tar -C $dir2 -pczf $dir2/ALL_SNPs.tar.gz SNPs
 
 echo ""
 echo "-- Archive ready at $dir2/ALL_SNPs.tar.gz --"
 
-# Send you an email when it's ready, nice isn't it?
-sendemail -f $fromemail -t $email -u "`basename $(dirname $dir2)` #SNPCalling done" -m "`date`: `basename $(dirname $dir2)` SNPs calling job is completed." ## -a $dir2/ALL_SNPs.tar.gz ## Optional -a parameter: add a file as attachment (/!\ size)
+# Send you an email when it's ready, nice is'nt it?
+sendemail -f $fromemail -t $email -u "`basename $dir2` #SNPCalling done" -m "`date`: `basename $dir2` SNPs calling job is completed." ## -a $dir2/ALL_SNPs.tar.gz ## Optional -a parameter: add a file as attachment (/!\ size)
 
 # That's all folks!
 echo ""

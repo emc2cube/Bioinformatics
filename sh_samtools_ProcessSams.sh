@@ -1,19 +1,15 @@
 #!/bin/bash
 #
-# Usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]
+# usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]
 #
-##############################################################
-##                      Description                         ##
-##############################################################
+## Description ##
 #
 # This script will process .sam files and convert them to .bam files.
 # Optional: reads can be filtered on their MapQ score to remove poorly aligned reads.
 # These .bam files are then sorted and indexed.
 # Intermediate files are deleted to save space.
 #
-##############################################################
-##                  Configurable variables                  ##
-##############################################################
+## Configurable variables ##
 #
 # Filter by MapQ quality score to remove poor aligned reads.
 # samtools defaut is 0 (no filtering), 10<MapQ<20 is advised
@@ -27,7 +23,7 @@ dir="$1"
 # Get config file location
 config="$2"
 
-if [ -z "$dir" ]
+if [ -z $dir ]
 then
     echo "Usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]"
     exit
@@ -45,7 +41,7 @@ then
         source "$config"
     else
         echo "Invalid config file detected. Is it an .ini file?"
-        echo "Usage: sh_samtools_ProcessSams.sh </path/to/sam/files/> [/path/to/config/file.ini]"
+        echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
         exit
     fi
 fi
@@ -89,6 +85,25 @@ do
     out2=`echo $i | sed 's/.sam/.sorted/'`
 
 # Convert .sam to .bam with optional filter on MapQ quality score
+    samtools view -bS -q $mapq $dir/$i -o $dir/$out1
+
+# Remove .sam file
+    rm $dir/$i
+
+# Sort .bam file
+    samtools sort $dir/$out1 $dir/$out2
+
+# Clean temporary unsorted .bam file
+    rm $dir/$out1
+
+# Index sorted .bam
+    samtools index $dir/$out2.bam
+
+done
+
+echo ""
+echo "-- Conversion done! --"
+r on MapQ quality score
     samtools view -bS -q $mapq $dir/$i -o $dir/$out1
 
 # Remove .sam file

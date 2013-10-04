@@ -2,9 +2,7 @@
 #
 # Usage: sh_md5alldir.sh </path/to/dir/> [-options, -? or --help for help]
 #
-##############################################################
-##                      Description                         ##
-##############################################################
+## Description ##
 #
 # This script will process all sub-directories of the input folders and for each of them
 # will create a <directory_name>.md5 file if it does not exist yet, or check <directory> files
@@ -53,8 +51,6 @@ fi
 
 folders=`find $(readlink -f $dir) -mindepth 1 -type d -not -path "*/.*"`
 
-echo ""
-
 if [ -z "$folders" ]
 then
     if [ -f "$dir/$(basename $dir).md5" ] && [ "$2" != "--force" -o "$2" != "-f" ]
@@ -76,6 +72,15 @@ else
             md5sum -c $(basename $i).md5 2>/dev/null
         else
             echo "Creating md5 file for files in $i"
+            files=`find $(readlink -f $i) -type f -not -name ".*"`
+            md5sum $files > $i/$(basename $i).md5 2>/dev/null
+        fi
+    done
+fi
+
+echo ""
+echo "Done"
+in $i"
             files=`find $(readlink -f $i) -type f -not -name ".*"`
             md5sum $files > $i/$(basename $i).md5 2>/dev/null
         fi
