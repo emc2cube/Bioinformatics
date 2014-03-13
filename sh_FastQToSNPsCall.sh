@@ -24,6 +24,3 @@ fi
 
 sh_bowtie2_AlignAll.sh "$1" "$2" "$4"
 sh_gatkSNPcalling.sh "$2" "$3" "$4"
-AlignAll.sh "$1" "$2" "$4"
-sh_samtools_ProcessSams.sh "$2" "$4"
-sh_gatkSNPcalling.sh "$2" "$3" "$4"

@@ -199,7 +199,7 @@ echo "Processing R1 files"
 echo ""
 for i in $filestomergeR1
 do
-    sampleoutput=`echo $i | sed 's/_L[0-9][0-9][0-9]_R1_[0-9][0-9][0-9]/_L001_R1_001/g'`
+    sampleoutput=`echo $i | sed 's/_L[0-9][0-9][0-9]_R1_[0-9][0-9][0-9]/_L001_R1/g'`
     echo "Processing $i"
     cat $dir/$i >> $dir/$sampleoutput
     mv $dir/$i $dir/FastQbackup/
@@ -209,7 +209,7 @@ echo "Processing R2 files"
 echo ""
 for i in $filestomergeR2
 do
-    sampleoutput=`echo $i | sed 's/_L[0-9][0-9][0-9]_R2_[0-9][0-9][0-9]/_L001_R2_001/g'`
+    sampleoutput=`echo $i | sed 's/_L[0-9][0-9][0-9]_R2_[0-9][0-9][0-9]/_L001_R2/g'`
     echo "Processing $i"
     cat $dir/$i >> $dir/$sampleoutput
     mv $dir/$i $dir/FastQbackup/
@@ -348,12 +348,12 @@ do
     samout=`basename $read1 | sed "s/$fileext/.sam/g" | sed 's/_L001_R1//g'`
     alignlog=`basename $read1 | sed "s/$fileext/.alignlog/g" | sed 's/_L001_R1//g'`
     bamout=`basename $read1 | sed "s/$fileext/.bam/g" | sed 's/_L001_R1//g'`
-    bamsortedout=`basename $read1 | sed "s/$fileext/.sorted/g" | sed 's/_L001_R1_001//g'`
+    bamsortedout=`basename $read1 | sed "s/$fileext/.sorted/g" | sed 's/_L001_R1//g'`
     if [ -z $LB ]
     then
         LB=`basename $dir2`
     fi
-    SM=`echo $read1 | awk -F_L001_ '{print $1}'`
+    SM=`echo $read1 | awk -F_L001 '{print $1}'`
     if [ "$fileext" = ".fastq.gz" ]
     then
         CN=`gzip -cd $dir2/$read1 | head -n 1 | awk -F: '{print $1}' | sed 's/@//'`
