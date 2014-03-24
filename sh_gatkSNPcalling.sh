@@ -12,12 +12,18 @@
 # - call SNPs.
 # - annotate using annovar
 # - merge csv files and do some cleaning for an easy downloadable file
+# OR
+# - create a Family.vcf file with all the family members
 #
 # usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]
 #
 ##############################################################
 ##                  Configurable variables                  ##
 ##############################################################
+#
+# Are these samples part of a same family?
+# Yes = 1 ; No = 0
+family="0"
 #
 # PED file to specify family relations if available
 ped=""
@@ -174,7 +180,7 @@ fi
 echo ""
 echo "HARDWARE"
 echo "This computer have" `nproc --all` "CPUs installed, $threads CPUs will be used"
-echo "$mem GB of memory will be allocated to java"
+echo "${mem}GB of memory will be allocated to java"
 echo ""
 if [ -z "$config" ]
 then
@@ -366,25 +372,79 @@ echo "----------------"
 
 done
 
+if [ $family -eq "1" ]
+then
+	echo "-- Processing a family"
+	echo ""
+
+	# Initialize
+	familyvcffiles=""
+	mkdir -p $dir2/$logs
+	mkdir -p $dir2/tmp
+	mkdir -p $dir2/Family
+
+	#Getting files names
+	vcffiles=`ls $dir2/*.filteredsnps.vcf`
+
+	for f in $vcffiles
+	do
+		familyvcffiles="$familyvcffiles --variant:`cat $f | grep CHROM | awk -F'\t' '{print $10}'` $f"
+	done
+
+	# Create an unique vcf file for the family
+	java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T CombineVariants -R $fasta_refgenome $familyvcffiles -o $dir2/Family.vcf -L $regions -ped $ped
+
+	echo ""
+	echo "-- Annotating Familial SNPs using annovar --"
+	echo ""
+	    annovarfile="Family.annovar"
+	    snpssummary="Family.snps"
+
+	    # Annotate using annovar
+	    # Convert to annovar format from GATK .vcf file
+	    convert2annovar.pl --format vcf4old --includeinfo $dir2/Family.vcf --outfile $dir2/Family/$annovarfile
+
+	    # Annotate using annovar
+ 	   summarize_annovar.pl --buildver hg19 $dir2/Family/$annovarfile $annovar/humandb -outfile $dir2/Family/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
+
+	    # Fixing headers to add back sample names in annovar csv output files
+	    sed "1s/Otherinfo/`cat $dir2/Family.vcf | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/Family/$snpssummary.exome_summary.csv > $dir2/Family/$snpssummary.exome_summary_fixed.csv
+	    sed "1s/Otherinfo/`cat $dir2/Family.vcf | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/Family/$snpssummary.genome_summary.csv > $dir2/Family/$snpssummary.genome_summary_fixed.csv
+
+	# Remove indermediate files
+	#    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
+    rm -rf $dir2/tmp ## Temporary folder used by Java
+
+	echo ""
+	echo "-- Family annotation done. --"
+
+	# Creating folders for archive
+	[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
+	[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
+	mkdir -p $dir2/ALL_SNPs/
+else # This is not a family, consider multiple sporadic samples, create an unique csv file for all of them.
+	[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
+	[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
+	[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
+	mkdir -p $dir2/ALL_SNPs/
+	mkdir -p $dir2/ALL_CSVs/
+
+	echo ""
+	echo "-- Merging csv files. --"
+
+	# Merge all exome_summary files into an All_SNPs_merged.csv file
+	cp $dir2/*/*.snps.exome_summary.csv $dir2/ALL_CSVs/
+	sh_csvmerge.sh $dir2/ALL_CSVs/ $dir2/ALL_SNPs/
+	[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
+fi
+
 # Final processing of result files
 echo ""
 echo "-- Final processing of all SNPs files --"
 
-[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
-[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
-[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
-
 # Listing all SNPs folders
 
-archive=`find $dir2/* -maxdepth 0 -mindepth 0 -type d -not -name $logs`
-
-mkdir -p $dir2/ALL_SNPs/
-mkdir -p $dir2/ALL_CSVs/
-
-# Merging all exome_summary files into a All_SNPs_merged.csv file
-cp $dir2/*/*.snps.exome_summary.csv $dir2/ALL_CSVs/
-sh_csvmerge.sh $dir2/ALL_CSVs/ $dir2/ALL_SNPs/
-[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
+archive=`find $dir2/* -maxdepth 0 -mindepth 0 -type d -not -name $logs -not -name ALL_SNPs`
 
 # Creating and archive of all SNPs folders for easy download
 for i in $archive
