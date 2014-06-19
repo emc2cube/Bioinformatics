@@ -251,23 +251,22 @@ for i in $nodupfiles
 do
 # Generate file names from sample name
     echo "Processing" $i
+    samplename=`echo $i | awk -F. '{print $1}'`
     nodupbai=`echo $i | sed 's/.bam/.bai/g'`
-    intervals=`echo $i | sed 's/.sorted.nodup.bam/.intervals/g'`
-    realigned=`echo $i | sed 's/.sorted.nodup.bam/.realigned.bam/g'`
-    realignedbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.bai/g'`
-    matefixed=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.bam/g'`
-    matefixedbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.bai/g'`
-    recal_data=`echo $i | sed 's/.sorted.nodup.bam/.recal.grp/g'`
-    recal=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bam/g'`
-    recalbai=`echo $i | sed 's/.sorted.nodup.bam/.realigned.fixed.recal.bai/g'`
-    rawSNP=`echo $i | sed 's/.sorted.nodup.bam/.rawsnp.vcf/g'`
-    snpmetrics=`echo $i | sed 's/.sorted.nodup.bam/.snpmetrics/g'`
-    filteredSNP=`echo $i | sed 's/.sorted.nodup.bam/.filteredsnps.vcf/g'`
-    annovarfile=`echo $i | sed 's/.sorted.nodup.bam/.annovar/g'`
-#    snpsfolder=`echo $i | awk -F. '{print $1}'`
-    snpsfolder=`echo $i | sed 's/.sorted.nodup.bam//g'`
-    snpssummary=`echo $i | sed 's/.sorted.nodup.bam/.snps/g'`
-    coverage=`echo $i | sed 's/.sorted.nodup.bam/.coverage/g'`
+    intervals="$samplename.intervals"
+    realigned="$samplename.realigned.bam"
+    realignedbai="$samplename.realigned.bai"
+    matefixed="$samplename.realigned.fixed.bam"
+    matefixedbai="$samplename.realigned.fixed.bai"
+    recal_data="$samplename.recal.grp"
+    recal="$samplename.realigned.fixed.recal.bam"
+    recalbai="$samplename.realigned.fixed.recal.bai"
+    rawSNP="$samplename.rawsnp.vcf"
+    snpmetrics="$samplename.snpmetrics"
+    filteredSNP="$samplename.filteredsnps.vcf"
+    annovarfile="$samplename.annovar"
+    snpssummary="$samplename.snps"
+    coverage="$samplename.coverage"
 
     # Determining (small) suspicious intervals which are likely in need of realignment
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads -ped $ped
@@ -314,18 +313,16 @@ echo ""
 
     echo "Processing" $filteredSNP
 
-    # Annotate using annovar
     # Convert to annovar format from GATK .vcf file
     convert2annovar.pl --format vcf4 --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
 
     # Annotate using annovar
-    mkdir -p $dir2/$snpsfolder
-    summarize_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb -outfile $dir2/$snpsfolder/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
+    $annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500si_all,1000g2012apr_all,snp138,ljb23_all,clinvar_20140303 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove --csvout
 
-    # Fixing headers to add back sample names in annovar csv output files
-    sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.exome_summary.csv > $dir2/$snpsfolder/$snpssummary.exome_summary_fixed.csv
-    sed "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpsfolder/$snpssummary.genome_summary.csv > $dir2/$snpsfolder/$snpssummary.genome_summary_fixed.csv
-
+    # Fixing headers and cleaning files
+    sed -i "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpssummary.hg19_multianno.csv		# Fixing headers to add back sample names in annovar csv output files
+    sed -i "s/\t/,/g" $dir2/$snpssummary.hg19_multianno.csv		# Remove extra tabs from Otherinfos fields
+    sed -i 's/\\x2c//g' $dir2/$snpssummary.hg19_multianno.csv	# ClinVar database is full of \x2c (comma in hexadecimal), clean it up!
 
 echo ""
 echo "-- Annotation done. --"
@@ -337,8 +334,6 @@ echo ""
     echo "Processing" $recal
     # Will compute all coverage informations needed
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions -ct 10 -ct 15 -ct 30 -ped $ped
-    # Copy the coverage summary file to SNP folder as it will be archived later for easy download
-    cp $dir2/$coverage".sample_summary" $dir2/$snpsfolder/
 
 echo ""
 echo "-- Coverage computed --"
@@ -347,7 +342,7 @@ echo "-- Coverage computed --"
 #sh_ACMGfilter.sh $dir2/$snpsfolder $dir2/$snpsfolder
 
 echo ""
-echo "-- Sample $snpsfolder is done, results are in $dir2/$snpsfolder --"
+echo "-- Sample $samplename is done, results are in $dir2/ --"
 echo "----------------"
 
 # Remove indermediate files
@@ -368,11 +363,17 @@ echo "----------------"
 #    rm $dir2/"$filteredSNP".idx ## .idx SNPs index file of $filteredSNP. To be removed or kept depending of $filteredSNP
 #    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
     rm $dir2/$coverage ## Huge file! not sure if we should keep it.
+    rm $dir2/$coverage.sample_cumulative_coverage_counts ## Other files from coverage calc.
+    rm $dir2/$coverage.sample_cumulative_coverage_proportions
+    rm $dir2/$coverage.sample_interval_statistics
+    rm $dir2/$coverage.sample_interval_summary
+    rm $dir2/$coverage.sample_statistics
     rm -rf $dir2/tmp ## Temporary folder used by Java
 
 done
 
 if [ $family -eq "1" ]
+
 then
 	echo "-- Processing a family"
 	echo ""
@@ -381,7 +382,6 @@ then
 	familyvcffiles=""
 	mkdir -p $dir2/$logs
 	mkdir -p $dir2/tmp
-	mkdir -p $dir2/Family
 
 	#Getting files names
 	vcffiles=`ls $dir2/*.filteredsnps.vcf`
@@ -397,23 +397,27 @@ then
 	echo ""
 	echo "-- Annotating Familial SNPs using annovar --"
 	echo ""
-	    annovarfile="Family.annovar"
-	    snpssummary="Family.snps"
+	annovarfile="Family.annovar"
+	snpssummary="Family.snps"
+	filteredSNP="Family.vcf"
 
-	    # Annotate using annovar
-	    # Convert to annovar format from GATK .vcf file
-	    convert2annovar.pl --format vcf4old --includeinfo $dir2/Family.vcf --outfile $dir2/Family/$annovarfile
+	# Annotate using annovar
+	# Convert to annovar format from GATK .vcf file
+	convert2annovar.pl --format vcf4old --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
 
-	    # Annotate using annovar
- 	   summarize_annovar.pl --buildver hg19 $dir2/Family/$annovarfile $annovar/humandb -outfile $dir2/Family/$snpssummary -verdbsnp 137 -ver1000g 1000g2012apr -veresp 6500
+	# Annotate using annovar
+	$annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500si_all,1000g2012apr_all,snp138,ljb23_all,clinvar_20140303 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove #No csv output as annovar would add the otherinfos data as an unique text field, delimited by "", which confuse an import to excel.
 
-	    # Fixing headers to add back sample names in annovar csv output files
-	    sed "1s/Otherinfo/`cat $dir2/Family.vcf | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/Family/$snpssummary.exome_summary.csv > $dir2/Family/$snpssummary.exome_summary_fixed.csv
-	    sed "1s/Otherinfo/`cat $dir2/Family.vcf | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/Family/$snpssummary.genome_summary.csv > $dir2/Family/$snpssummary.genome_summary_fixed.csv
+	# Fixing headers to add back sample names in annovar txt output file, and convert it to a proper csv
+	sed -i "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g'`/g" $dir2/$snpssummary.hg19_multianno.txt		# Add back sample names in annovar output file
+	set -i "s/,/;/g" $dir2/$snpssummary.hg19_multianno.txt		# Remove any potential existing commas and replace them by semi columns
+	sed -i "s/\t/,/g" $dir2/$snpssummary.hg19_multianno.txt		# Convert tabs to commas
+	sed -i 's/\\x2c//g' $dir2/$snpssummary.hg19_multianno.txt	# ClinVar database is full of \x2c (comma in hexadecimal), clean it up!
+	mv $dir2/$snpssummary.hg19_multianno.txt $dir2/$snpssummary.hg19_multianno.csv
 
 	# Remove indermediate files
-	#    rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
-    rm -rf $dir2/tmp ## Temporary folder used by Java
+	#rm $dir2/$annovarfile ## Annovar file. Will be used for annotations, better to keep it
+	rm -rf $dir2/tmp ## Temporary folder used by Java
 
 	echo ""
 	echo "-- Family annotation done. --"
@@ -422,31 +426,45 @@ then
 	[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
 	[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
 	mkdir -p $dir2/ALL_SNPs/
+	
 else # This is not a family, consider multiple sporadic samples, create an unique csv file for all of them.
+
 	[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
-	[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
-	[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
 	mkdir -p $dir2/ALL_SNPs/
-	mkdir -p $dir2/ALL_CSVs/
 
 	echo ""
 	echo "-- Merging csv files. --"
 
-	# Merge all exome_summary files into an All_SNPs_merged.csv file
-	cp $dir2/*/*.snps.exome_summary.csv $dir2/ALL_CSVs/
-	sh_csvmerge.sh $dir2/ALL_CSVs/ $dir2/ALL_SNPs/
-	[ -d $dir2/ALL_CSVs ] && rm -rf $dir2/ALL_CSVs
+	[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
+	[ -f $dir2/All_SNPs_merged.csv ] && rm $dir2/All_SNPs_merged.csv
+
+	# Merge all .csv files into an All_SNPs_merged.csv file
+    csvfiles=`ls $dir2/ | grep .csv`
+    echo "Sample,`head -1 $dir2/\`ls $dir2 | grep .csv | head -1\` | sed s/,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,.*$//g`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $dir2/All_SNPs_merged.csv
+
+    for i in $csvfiles
+    do
+        filename=`echo $i | awk -F. '{print $1}'` 
+        tail -n +2 $dir2/$i > $dir2/filecontent
+        while read line
+        do 
+            echo "\"$filename\",$line" >> $dir2/All_SNPs_merged.csv
+            done < $dir2/filecontent
+    done
+
+    rm $dir2/filecontent
+
 fi
 
 # Final processing of result files
 echo ""
 echo "-- Final processing of all SNPs files --"
 
-# Listing all SNPs folders
+# Listing all csv files
 
-archive=`find $dir2/* -maxdepth 0 -mindepth 0 -type d -not -name $logs -not -name ALL_SNPs`
+archive=`ls $dir2/*.csv`
 
-# Creating and archive of all SNPs folders for easy download
+# Creating and archive of all csv files for easy download
 for i in $archive
 do
     cp -rf $i $dir2/ALL_SNPs/`basename $i`

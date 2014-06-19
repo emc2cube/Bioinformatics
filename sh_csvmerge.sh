@@ -6,9 +6,9 @@
 ##                      Description                         ##
 ##############################################################
 #
-# This script will merge .snps.exome_summary.csv file to a new one, adding the sample
+# This script will merge .csv file to a new one, adding the sample
 # name in the first column, and fixing GATK header columns in the resulting ANNOVAR
-# .snps.exome_summary.csv file.
+# .csv file.
 #
 ##
 
@@ -39,19 +39,17 @@ fi
 
 [ -f $out/filecontent ] && rm $out/filecontent
 
-csvfiles=`ls $dir/ | grep .snps.exome_summary.csv`
-header=`ls $dir | grep .snps.exome_summary.csv | head -1`
-
-echo "Sample,`head -1 $dir/$header | sed s/,Otherinfo//g`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $out/All_SNPs_merged.csv
+csvfiles=`ls $out/ | grep .csv`
+echo "Sample,`head -1 $out/\`ls $out | grep .csv | head -1\` | sed s/,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,.*$//g`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $out/All_SNPs_merged.csv
 
 for i in $csvfiles
 do
-    filename=`echo $i | awk -F. '{print $1}'` 
-    tail -n +2 $dir/$i > $out/filecontent
-    while read line
-    do 
-        echo "\"$filename\",$line" >> $out/All_SNPs_merged.csv
-        done < $out/filecontent
+	filename=`echo $i | awk -F. '{print $1}'` 
+	tail -n +2 $out/$i > $out/filecontent
+	while read line
+	do 
+		echo "\"$filename\",$line" >> $out/All_SNPs_merged.csv
+	done < $out/filecontent
 done
 
 rm $out/filecontent
