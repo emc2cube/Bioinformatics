@@ -314,15 +314,17 @@ echo ""
     echo "Processing" $filteredSNP
 
     # Convert to annovar format from GATK .vcf file
-    convert2annovar.pl --format vcf4 --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
+    $annovar/convert2annovar.pl --format vcf4 --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
 
     # Annotate using annovar
-    $annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500si_all,1000g2012apr_all,snp138,ljb23_all,clinvar_20140303 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove --csvout
+    $annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500si_all,1000g2012apr_all,snp138,ljb23_all,clinvar_20140303 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove #No csv output as annovar result file is full of commas by itself.
 
     # Fixing headers and cleaning files
-    sed -i "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`/g" $dir2/$snpssummary.hg19_multianno.csv		# Fixing headers to add back sample names in annovar csv output files
-    sed -i "s/\t/,/g" $dir2/$snpssummary.hg19_multianno.csv		# Remove extra tabs from Otherinfos fields
-    sed -i 's/\\x2c//g' $dir2/$snpssummary.hg19_multianno.csv	# ClinVar database is full of \x2c (comma in hexadecimal), clean it up!
+    sed -i "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g'`/g" $dir2/$snpssummary.hg19_multianno.txt		# Fixing headers to add back sample names in annovar csv output files
+	sed -i "s/,/;/g" $dir2/$snpssummary.hg19_multianno.txt		# Remove any potential existing commas and replace them by semi columns
+	sed -i "s/\t/,/g" $dir2/$snpssummary.hg19_multianno.txt		# Convert tabs to commas
+	sed -i 's/\\x2c//g' $dir2/$snpssummary.hg19_multianno.txt	# ClinVar database is full of \x2c (comma in hexadecimal), clean it up!
+	mv $dir2/$snpssummary.hg19_multianno.txt $dir2/$snpssummary.hg19_multianno.csv
 
 echo ""
 echo "-- Annotation done. --"
@@ -403,14 +405,14 @@ then
 
 	# Annotate using annovar
 	# Convert to annovar format from GATK .vcf file
-	convert2annovar.pl --format vcf4old --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
-
+	$annovar/convert2annovar.pl --format vcf4old --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
+	
 	# Annotate using annovar
 	$annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500si_all,1000g2012apr_all,snp138,ljb23_all,clinvar_20140303 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove #No csv output as annovar would add the otherinfos data as an unique text field, delimited by "", which confuse an import to excel.
 
 	# Fixing headers to add back sample names in annovar txt output file, and convert it to a proper csv
 	sed -i "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g'`/g" $dir2/$snpssummary.hg19_multianno.txt		# Add back sample names in annovar output file
-	set -i "s/,/;/g" $dir2/$snpssummary.hg19_multianno.txt		# Remove any potential existing commas and replace them by semi columns
+	sed -i "s/,/;/g" $dir2/$snpssummary.hg19_multianno.txt		# Remove any potential existing commas and replace them by semi columns
 	sed -i "s/\t/,/g" $dir2/$snpssummary.hg19_multianno.txt		# Convert tabs to commas
 	sed -i 's/\\x2c//g' $dir2/$snpssummary.hg19_multianno.txt	# ClinVar database is full of \x2c (comma in hexadecimal), clean it up!
 	mv $dir2/$snpssummary.hg19_multianno.txt $dir2/$snpssummary.hg19_multianno.csv
@@ -437,6 +439,8 @@ else # This is not a family, consider multiple sporadic samples, create an uniqu
 
 	[ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
 	[ -f $dir2/All_SNPs_merged.csv ] && rm $dir2/All_SNPs_merged.csv
+	[ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
+	mkdir -p $dir2/ALL_SNPs/
 
 	# Merge all .csv files into an All_SNPs_merged.csv file
     csvfiles=`ls $dir2/ | grep .csv`
