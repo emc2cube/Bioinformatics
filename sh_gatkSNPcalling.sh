@@ -118,7 +118,7 @@ dir2="$2"
 config="$3"
 
 # Check paths and trailing / in directories
-if [ -z $dir -o -z "$dir2" ]
+if [ -z "$dir" -o -z "$dir2" ]
 then
     echo "Usage: sh_gatkSNPcalling.sh <.bam folder> <destination folder> [/path/to/config/file.ini]"
     exit
@@ -223,6 +223,7 @@ do
 done
 echo ""
 echo "-- Duplicates removed --"
+echo ""
 else
 echo ""
 echo "-- Copying files (no duplication analysis) --"
@@ -238,19 +239,18 @@ do
 done
 echo ""
 echo "-- Files copied --"
+echo ""
 fi
 
-# Perform local realignment around known indels
-echo ""
-echo "-- Local realignment around indels --"
-echo ""
-# Get files for local realignment
+# Start GATK best practice sample processing
+
+# List bam files to process
 nodupfiles=`ls $dir2/ --hide=*.bai | grep .nodup.bam`
 
 for i in $nodupfiles
 do
 # Generate file names from sample name
-    echo "Processing" $i
+    
     samplename=`echo $i | awk -F. '{print $1}'`
     nodupbai=`echo $i | sed 's/.bam/.bai/g'`
     intervals="$samplename.intervals"
@@ -268,6 +268,12 @@ do
     snpssummary="$samplename.snps"
     coverage="$samplename.coverage"
 
+echo ""
+echo "-- Local realignment around indels --"
+echo ""
+
+echo "Processing" $i
+
     # Determining (small) suspicious intervals which are likely in need of realignment
     java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads -ped $ped
 
@@ -279,7 +285,6 @@ do
 
 echo ""
 echo "-- Local realignment done --"
-
 echo ""
 echo "-- Quality score recalibration --"
 echo ""
@@ -345,6 +350,8 @@ echo "-- Coverage computed --"
 
 echo ""
 echo "-- Sample $samplename is done, results are in $dir2/ --"
+echo "----------------"
+echo "----------------"
 echo "----------------"
 
 # Remove indermediate files
