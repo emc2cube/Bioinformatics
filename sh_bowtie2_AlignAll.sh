@@ -306,7 +306,7 @@ then
         date
         echo "Trimming" $dir/$read1
         echo ""
-        java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $Trimmomatic/trimmomatic-0.30.jar PE -threads $threads -phred33 $dir/$read1 $dir/$read2 $dir2/$out1 $unpaired1 $dir2/$out2 $unpaired2 ILLUMINACLIP:$Trimmomatic/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:20
+        java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $Trimmomatic/trimmomatic.jar PE -threads $threads -phred33 $dir/$read1 $dir/$read2 $dir2/$out1 $unpaired1 $dir2/$out2 $unpaired2 ILLUMINACLIP:$Trimmomatic/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:20
         echo ""
         # Run fastqc to generate quality control files
 #        fastqc -o $dir2/$logs/ --noextract $dir2/$out1 $dir2/$out2

@@ -80,12 +80,3 @@ fi
 
 echo ""
 echo "Done"
-in $i"
-            files=`find $(readlink -f $i) -type f -not -name ".*"`
-            md5sum $files > $i/$(basename $i).md5 2>/dev/null
-        fi
-    done
-fi
-
-echo ""
-echo "Done"
