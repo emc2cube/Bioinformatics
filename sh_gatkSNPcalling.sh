@@ -30,8 +30,8 @@ ped=""
 #
 # Picard-tools location
 # example:
-# picard="/media/Userland/Applications/picard-tools"
-picard="/media/Userland/Applications/picard-tools"
+# picard="/media/Userland/Applications/picard-tools/picard.jar"
+picard="/media/Userland/Applications/picard-tools/picard.jar"
 #
 # GATK .jar file location
 # example:
@@ -147,6 +147,13 @@ then
 fi
 
 # Displaying variables to shell
+if [ $family -eq "1" ] && [ -z "$ped" ]
+then
+echo ""
+echo "-- WARNING! --"
+echo "These samples are part of a family but you did not provide pedigree informations."
+echo "Will proceed anyway but you should consider creating a pedigree file for better results."
+fi
 echo ""
 echo "-- Informations --"
 echo ""
@@ -219,7 +226,7 @@ do
     stdout=`echo $i | sed "s/.sorted.bam/.noduplog/g"`
 
     # Use picard tools MarkDuplicates with removal of duplicates and index creation options.
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/MarkDuplicates.jar I=$dir/$i O=$dir2/$out METRICS_FILE=$dir2/$logs/$metrics REMOVE_DUPLICATES=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true 2>$dir2/$logs/$stdout
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard MarkDuplicates I=$dir/$i O=$dir2/$out METRICS_FILE=$dir2/$logs/$metrics REMOVE_DUPLICATES=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true 2>$dir2/$logs/$stdout
 done
 echo ""
 echo "-- Duplicates removed --"
@@ -275,13 +282,13 @@ echo ""
 echo "Processing" $i
 
     # Determining (small) suspicious intervals which are likely in need of realignment
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     # Running the realigner over those intervals
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     # When using paired end data, the mate information must be fixed, as alignments may change during the realignment process
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard/FixMateInformation.jar I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard FixMateInformation I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
 
 echo ""
 echo "-- Local realignment done --"
@@ -291,8 +298,8 @@ echo ""
 
     echo "Processing" $matefixed
     # Quality score recalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions -ped $ped
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
 echo ""
 echo "-- Recalibration done --"
@@ -304,10 +311,10 @@ echo ""
     date
     echo "Processing" $recal
     # Produce raw SNP calls
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T UnifiedGenotyper -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -glm BOTH -nt $threads -L $regions -metrics $dir2/$logs/$snpmetrics `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     # Filter SNPs
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ >= 30.0 && MQ < 40.0 || FS > 50.0 && FS <= 60 || HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5.0" --filterName "LowCoverage" --filterExpression "DP >= 5.0 && DP < 10.0" --filterName "ShallowCoverage" --filterExpression "QUAL < 30.0" --filterName "VeryLowQual" --filterExpression "QUAL >= 30.0 && QUAL < 50.0" --filterName "LowQual" --filterExpression "QD < 2.0" --filterName "LowQD" --filterExpression "FS > 60.0" --filterName "HighFSScore" --filterExpression "FS > 50.0 && FS <= 60" --filterName "MedFSScore" --filterExpression "HaplotypeScore > 13.0" --filterName "HighHaplotypeScore" --filterExpression "HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "MedHighHaplotypeScore" --filterExpression "MQ < 40.0" --filterName "LowMQ" --filterExpression "MQ >= 30.0 && MQ < 40.0" --filterName "MedMQ" --filterExpression "MQRankSum < -12.5" --filterName "LowMQRankSum" --filterExpression "ReadPosRankSum < -8.0" --filterName "LowReadPosRankSum" -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantFiltration -R $fasta_refgenome -V $dir2/$rawSNP -o $dir2/$filteredSNP --clusterWindowSize 10 --filterExpression "MQ >= 30.0 && MQ < 40.0 || FS > 50.0 && FS <= 60 || HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "HARD_TO_VALIDATE" --filterExpression "DP < 5.0" --filterName "LowCoverage" --filterExpression "DP >= 5.0 && DP < 10.0" --filterName "ShallowCoverage" --filterExpression "QUAL < 30.0" --filterName "VeryLowQual" --filterExpression "QUAL >= 30.0 && QUAL < 50.0" --filterName "LowQual" --filterExpression "QD < 2.0" --filterName "LowQD" --filterExpression "FS > 60.0" --filterName "HighFSScore" --filterExpression "FS > 50.0 && FS <= 60" --filterName "MedFSScore" --filterExpression "HaplotypeScore > 13.0" --filterName "HighHaplotypeScore" --filterExpression "HaplotypeScore >= 13.0 && HaplotypeScore < 60.0" --filterName "MedHighHaplotypeScore" --filterExpression "MQ < 40.0" --filterName "LowMQ" --filterExpression "MQ >= 30.0 && MQ < 40.0" --filterName "MedMQ" --filterExpression "MQRankSum < -12.5" --filterName "LowMQRankSum" --filterExpression "ReadPosRankSum < -8.0" --filterName "LowReadPosRankSum" `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
 echo ""
 echo "-- SNPs called --"
@@ -340,7 +347,7 @@ echo ""
 
     echo "Processing" $recal
     # Will compute all coverage informations needed
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions -ct 10 -ct 15 -ct 30 -ped $ped
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverage -L $regions -ct 10 -ct 15 -ct 30 `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
 echo ""
 echo "-- Coverage computed --"
@@ -401,7 +408,7 @@ then
 	done
 
 	# Create an unique vcf file for the family
-	java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T CombineVariants -R $fasta_refgenome $familyvcffiles -o $dir2/Family.vcf -L $regions -ped $ped
+	java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T CombineVariants -R $fasta_refgenome $familyvcffiles -o $dir2/Family.vcf -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
 	echo ""
 	echo "-- Annotating Familial SNPs using annovar --"
