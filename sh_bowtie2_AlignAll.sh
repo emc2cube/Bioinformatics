@@ -173,7 +173,7 @@ else
 fi
 echo ""
 echo "This computer have" $(nproc --all) "CPUs installed, $threads CPUs will be used"
-echo "$memGB of memory will be allocated to the programs"
+echo "${mem}GB of memory will be allocated to the programs"
 
 # Initialize
 [ -f $dir2/temp1 ] && rm $dir2/temp1
