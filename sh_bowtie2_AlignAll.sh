@@ -16,7 +16,7 @@
 ##############################################################
 #
 # Trim sequences? (Remove adapters sequence, take a long time!)
-# 0 = No ; 1 = Yes, using Trim Galore http://www.bioinformatics.babraham.ac.uk/projects/trim_galore/ ; 2 = Yes, using trimmomatic http://www.usadellab.org/cms/index.php?page=trimmomatic ; 3 = Yes, using Jason script
+# 0 = No ; 1 = Yes, using Trim Galore http://www.bioinformatics.babraham.ac.uk/projects/trim_galore/ ; 2 = Yes, using trimmomatic http://www.usadellab.org/cms/index.php?page=trimmomatic ; 3 = Yes, using a custom script (you will need to edit this script below)
 trim="0"
 #
 # bowtie2 indexed reference genome location
@@ -314,21 +314,9 @@ then
     echo "-- Trimming done! --"
 elif [ $trim -eq "3" ]
 then
-    # Trim data with Jason script
-    echo ""
-	echo "-- Starting Trimming --"
-	echo ""
-    while read j;
-    do
-        read1=`echo $j | cut -d" " -f1`
-        read2=`echo $j | cut -d" " -f2`
-        out2=`basename $read1 | sed "s/$fileext/.trimlog/g" | sed 's/_R1//g'`
-        echo "Trimming" $dir/$read1
-        pyadapter_trim.py -a $dir/$read1 -b $dir/$read2 -o $dir2/ >$dir2/$logs/$out2
-    done < $dir2/TrimFastqs
-    fileext=".fastq"
-    echo ""
-    echo "-- Trimming done! --"
+    # Trim data with custom script
+    echo "Error: if you select a custom trimming option, you need to modify this section (line 318)"
+	exit
 fi
 
 # Get files for alignment
