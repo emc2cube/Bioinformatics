@@ -39,15 +39,15 @@ fi
 
 [ -f $out/filecontent ] && rm $out/filecontent
 
-annovarfile=`ls $dir/ | grep .snps.exome_summary.csv`
-fixheaderfile=`ls $dir/../ --hide=*.idx | grep filteredsnps.vcf`
-headerfix=`cat $dir/../$fixheaderfile | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`
+annovarfile=`ls $dir/ | grep _multianno.csv`
+fixheaderfile=`ls $dir/ --hide=*.idx | grep .filtered.vcf`
+headerfix=`cat $dir/$fixheaderfile | grep CHROM | sed 's/#//g' | sed 's/\t/,/g'`
 
 echo "`head -1 $dir/$annovarfile | sed 1s/Otherinfo//g`$headerfix" > $out/ACMG_genes.csv
 
 for i in BRCA1 BRCA2 TP53 STK11 MLH1 MSH2 MSH6 PMS2 APC MUTYH VHL MEN1 RET NTRK1 PTEN RB1 SDHD SDHAF2 SDHC SDHB TSC1 TSC2 WT1 NF2 COL3A1 FBN1 TGFBR1 TGFBR2 SMAD3 ACTA2 MYLK MYH11 MYBPC3 MYH7 TNNT2 TNNI3 TPM1 MYL3 ACTC1 PRKAG2 GLA MYL2 LMNA RYR2 PKP2 DSP DSC2 TMEM43 DSG2 KCNQ1 KCNH2 SCN5A LDLR APOB PCSK9 RYR1 CACNA1S 
 do
-    tail -n +2 $dir/$annovarfile | grep \"$i\" >> $out/ACMG_genes.csv
+    tail -n +2 $dir/$annovarfile | grep \",${i},\" >> $out/ACMG_genes.csv
 done
 
 echo "ACMG guidelines gene list generated as $out/ACMG_genes.csv"
