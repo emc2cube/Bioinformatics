@@ -379,7 +379,7 @@ echo "----------------"
 
 done
 
-if [ $gvcfonly -eq "1" ]
+if [ $gvcf -eq "1" ]
 then
     if [ -z "${iftttkey}" ]
     then
