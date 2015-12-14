@@ -32,6 +32,9 @@ family="0"
 # PED file to specify family relations if available
 ped=""
 #
+# Folder containing gVCFs to be used as a learning control for VQSR calibration
+popgvcf=""
+#
 # Should coverage be computed? (slow)
 # Yes = 1 ; No = 0
 coverage="0"
@@ -381,10 +384,10 @@ done
 
 if [ $gvcf -eq "1" ]
 then
-    if [ -z "${iftttkey}" ]
+    if [ -n "${iftttkey}" ]
     then
         # Trigger IFTTT maker channel event when it's ready, nice isn't it?
-        curl -X POST https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}
+        curl –silent -X POST https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}
     fi
 
 	# That's all folks!
@@ -402,40 +405,69 @@ echo ""
 echo "-- Joint Genotype processing --"
 echo ""
 
-rawSNP="JointGenotypeOutput.vcf"
-recalSNP="JointGenotypeOutput.recalibratedsnps.vcf"
-filteredSNP="JointGenotypeOutput.filtered.vcf"
-annovarfile="JointGenotypeOutput.annovar"
-snpssummary="JointGenotypeOutput.snps"
+if [ $family -eq "1" ]
+then
+    rawSNP="Family.vcf"
+    recalSNP="Family.recalibratedsnps.vcf"
+    filteredSNP="Family.filtered.vcf"
+    annovarfile="Family.annovar"
+    snpssummary="Family.snps"
+else
+    rawSNP="JointGenotypeOutput.vcf"
+    recalSNP="JointGenotypeOutput.recalibratedsnps.vcf"
+    filteredSNP="JointGenotypeOutput.filtered.vcf"
+    annovarfile="JointGenotypeOutput.annovar"
+    snpssummary="JointGenotypeOutput.snps"
+fi
 
     date
     
     # Get a list of all .g.vcf files
-    gvcf=`find $dir2/ -name '*.g.vcf' | grep .g.vcf | sed ':a;N;$!ba;s/\n/ -V /g'`
+    gvcf=`find $dir2/ -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'`
+
+if [ -n "${popgvcf}" ]
+then
+
+    if [ ${popgvcf: -1} == "/" ]
+    then
+        popgvcf=${popgvcf%?}
+    fi
+ 
+    allgvcf=`find $popgvcf -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'`
+
+    echo "Use samples from ${popgvcf}/ for VQSR agreggation"
+    echo ""
+    
+    # Produce raw SNP calls from all .g.vcf files
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V ${allgvcf} -o $dir2/aggregate.vcf -nt $threads
+
+fi
     
     # Produce raw SNP calls from all .g.vcf files
     echo "Performing Joint Genotyping"
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V $gvcf -o $dir2/$rawSNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V ${gvcf} -o $dir2/$rawSNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     # Variants recalibration
     echo ""
     echo "Variant recalibration"
 
     # Pass #1 for SNPs
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$rawSNP -resource:hapmap,known=false,training=true,truth=true,prior=15.0 $hapmap -resource:omni,known=false,training=true,truth=false,prior=12.0 $omni -resource:1000G,known=false,training=true,truth=false,prior=10.0 $onekGph1 -resource:dbsnp,known=true,training=false,truth=false,prior=6.0 $dbSNP -an QD -an MQ -an MQRankSum -an ReadPosRankSum -an FS -an SOR -an InbreedingCoeff -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_SNP.recal -tranchesFile $dir2/recalibrate_SNP.tranches -rscriptFile $dir2/recalibrate_SNP_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$rawSNP `if [ -n "${popgvcf}" ]; then echo "-aggregate ${dir2}/aggregate.vcf"; fi` -resource:hapmap,known=false,training=true,truth=true,prior=15.0 $hapmap -resource:omni,known=false,training=true,truth=false,prior=12.0 $omni -resource:1000G,known=false,training=true,truth=false,prior=10.0 $onekGph1 -resource:dbsnp,known=true,training=false,truth=false,prior=6.0 $dbSNP -an QD -an MQ -an MQRankSum -an ReadPosRankSum -an FS -an SOR -an InbreedingCoeff -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_SNP.recal -tranchesFile $dir2/recalibrate_SNP.tranches -rscriptFile $dir2/recalibrate_SNP_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
 
     # Pass #2 for SNPs ApplyRecalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$rawSNP -tranchesFile $dir2/recalibrate_SNP.tranches -recalFile $dir2/recalibrate_SNP.recal -o $dir2/$recalSNP --ts_filter_level 99.5 -mode SNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$rawSNP -tranchesFile $dir2/recalibrate_SNP.tranches -recalFile $dir2/recalibrate_SNP.recal -o $dir2/$recalSNP --ts_filter_level 99.5 -mode SNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
 
     # Pass #3 for Indels
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$recalSNP --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 $millsgold -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 $dbSNP -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_INDEL.recal -tranchesFile $dir2/recalibrate_INDEL.tranches -rscriptFile $dir2/recalibrate_INDEL_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$recalSNP `if [ -n "${popgvcf}" ]; then echo "-aggregate ${dir2}/aggregate.vcf"; fi` --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 $millsgold -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 $dbSNP -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_INDEL.recal -tranchesFile $dir2/recalibrate_INDEL.tranches -rscriptFile $dir2/recalibrate_INDEL_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
 
     # Pass #4 for Indels ApplyRecalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$recalSNP -tranchesFile $dir2/recalibrate_INDEL.tranches -recalFile $dir2/recalibrate_INDEL.recal -o $dir2/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$recalSNP -tranchesFile $dir2/recalibrate_INDEL.tranches -recalFile $dir2/recalibrate_INDEL.recal -o $dir2/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
     
 	# Remove indermediate files
     [ -f $dir2/${recalSNP} ] && rm $dir2/${recalSNP}
-    [ -f $dir2/${recalSNP} ] && rm $dir2/${recalSNP}.idx
+    [ -f $dir2/${recalSNP}.idx ] && rm $dir2/${recalSNP}.idx
+    [ -f $dir2/aggregate.vcf ] && rm $dir2/aggregate.vcf
+    [ -f $dir2/aggregate.vcf.idx ] && rm $dir2/aggregate.vcf.idx
     [ -f $dir2/recalibrate_SNP.tranches ] && rm $dir2/recalibrate_SNP.tranches
     [ -f $dir2/recalibrate_SNP.recal ] && rm $dir2/recalibrate_SNP.recal
     [ -f $dir2/recalibrate_SNP.recal.idx ] && rm $dir2/recalibrate_SNP.recal.idx
@@ -472,89 +504,6 @@ echo ""
 echo ""
 echo "-- Annotation done. --"
 
-
-if [ $family -eq "1" ]
-
-then
-    echo "-- Processing a family"
-    echo ""
-
-    # Initialize
-    familyvcffiles=""
-    mkdir -p $dir2/$logs
-    mkdir -p $dir2/tmp
-
-    #Getting files names
-    vcffiles=`ls $dir2/*.filteredsnps.vcf`
-
-    for f in $vcffiles
-    do
-        familyvcffiles="$familyvcffiles --variant:`cat $f | grep CHROM | awk -F'\t' '{print $10}'` $f"
-    done
-
-    # Create an unique vcf file for the family
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T CombineVariants -R $fasta_refgenome $familyvcffiles -o $dir2/Family.vcf -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
-
-    echo ""
-    echo "-- Annotating Familial SNPs using annovar --"
-    echo ""
-    annovarfile="Family.annovar"
-    snpssummary="Family.snps"
-    filteredSNP="Family.vcf"
-
-    # Annotate using annovar
-    # Convert to annovar format from GATK .vcf file
-    $annovar/convert2annovar.pl --format vcf4old --includeinfo $dir2/$filteredSNP --outfile $dir2/$annovarfile
-    
-    # Annotate using annovar
-    $annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500siv2_all,1000g2015feb_all,snp138,ljb26_all,clinvar_20150629 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove #No csv output as annovar would add the otherinfos data as an unique text field, delimited by "", which confuse an import to excel.
-
-    # Fixing headers to add back sample names in annovar txt output file, and convert it to a proper csv
-    sed -i "1s/Otherinfo/`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g'`/g" $dir2/$snpssummary.hg19_multianno.txt        # Add back sample names in annovar output file
-    sed -i "s/,/;/g" $dir2/$snpssummary.hg19_multianno.txt        # Remove any potential existing commas and replace them by semi columns
-    sed -i "s/\t/,/g" $dir2/$snpssummary.hg19_multianno.txt        # Convert tabs to commas
-    sed -i 's/\\x2c//g' $dir2/$snpssummary.hg19_multianno.txt    # ClinVar database is full of \x2c (comma in hexadecimal), clean it up!
-    mv $dir2/$snpssummary.hg19_multianno.txt $dir2/$snpssummary.hg19_multianno.csv
-
-    echo ""
-    echo "-- Family annotation done. --"
-
-    # Creating folders for archive
-    [ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
-    [ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
-    mkdir -p $dir2/ALL_SNPs/
-    
-else # This is not a family, consider multiple sporadic samples, create an unique csv file for all of them.
-
-    [ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
-    mkdir -p $dir2/ALL_SNPs/
-
-    echo ""
-    echo "-- Merging csv files. --"
-
-    [ -f $dir2/ALL_SNPs.tar.gz ] && rm $dir2/ALL_SNPs.tar.gz
-    [ -f $dir2/All_SNPs_merged.csv ] && rm $dir2/All_SNPs_merged.csv
-    [ -d $dir2/ALL_SNPs ] && rm -rf $dir2/ALL_SNPs
-    mkdir -p $dir2/ALL_SNPs/
-
-    # Merge all .csv files into an All_SNPs_merged.csv file
-    csvfiles=`ls $dir2/ | grep .csv`
-    echo "Sample,`head -1 $dir2/\`ls $dir2 | grep .csv | head -1\` | sed s/,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,.*$//g`,CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,FORMAT,GENOTYPE" > $dir2/All_SNPs_merged.csv
-
-    for i in $csvfiles
-    do
-        filename=`echo $i | awk -F. '{print $1}'` 
-        tail -n +2 $dir2/$i > $dir2/filecontent
-        while read line
-        do 
-            echo "\"$filename\",$line" >> $dir2/All_SNPs_merged.csv
-        done < $dir2/filecontent
-    done
-
-    rm $dir2/filecontent
-
-fi
-
 # Final processing of result files
 echo ""
 echo "-- Final processing of all SNPs files --"
@@ -563,28 +512,34 @@ echo "-- Final processing of all SNPs files --"
     csvarchive=`ls $dir2/*.csv`
     pdfarchive=`ls $dir2/*.pdf`
 
+    # Creating folders for archive
+    [ -f $dir2/Results.tar.gz ] && rm $dir2/Results.tar.gz
+    [ -d $dir2/Results ] && rm -rf $dir2/Results
+    mkdir -p $dir2/Results/
+
 # Creating and archive of all csv and pdf files for easy download
 for i in $csvarchive
 do
-    cp -rf $i $dir2/ALL_SNPs/`basename $i`
+    cp -rf $i $dir2/Results/`basename $i`
 done
 for i in $pdfarchive
 do
-    cp -rf $i $dir2/ALL_SNPs/`basename $i`
+    cp -rf $i $dir2/Results/`basename $i`
 done
 
-    tar --remove-files -C $dir2 -pczf $dir2/ALL_SNPs.tar.gz ALL_SNPs
+    tar --remove-files -C $dir2 -pczf $dir2/Results.tar.gz Results
 
 echo ""
-echo "-- Archive ready at $dir2/ALL_SNPs.tar.gz --"
+echo "-- Archive ready at $dir2/Results.tar.gz --"
 
     # Remove indermediate files
     [ -d $dir2/tmp ] && rm -rf $dir2/tmp ## Temporary folder used by Java
+    [ -d $dir2/logs ] && rm -rf $dir2/logs ## Logs, for troubleshooting
 
-if [ -z "${iftttkey}" ]
+if [ -n "${iftttkey}" ]
 then
     # Trigger IFTTT maker channel event when it's ready, nice isn't it?
-    curl -X POST https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}
+    curl -silent -X POST https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}
 fi
 
 # That's all folks!
