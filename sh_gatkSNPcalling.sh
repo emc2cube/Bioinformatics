@@ -33,6 +33,9 @@ family="0"
 ped=""
 #
 # Folder containing gVCFs to be used as a learning control for VQSR calibration
+# Leave empty if you have a ready to use .vcf file and use popgvcf below.
+popfolder=""
+# VCF file to be used as a learning control for VQSR calibration.
 popgvcf=""
 #
 # Should coverage be computed? (slow)
@@ -111,6 +114,13 @@ mem="24"
 #
 # log folder
 logs="logs"
+#
+# temporary folder
+tmp=""
+#
+# Custom cluster commands to be executed to load modules or other
+#customcmd="echo \"Currently running as user: \" && whoami"
+customcmd=""
 #
 # Trigger IFTTT when script is done.
 # You must register the "Maker channel" on https://ifttt.com/maker
@@ -227,7 +237,19 @@ echo ".-----------------------------------------------."
 # Initialize
 mkdir -p $dir2/
 mkdir -p $dir2/$logs
-mkdir -p $dir2/tmp
+if [ -z ${tmp} ]
+then
+    tmp="${dir2}/tmp"
+fi
+mkdir -p ${tmp}
+
+# Executing custom commands
+if [ -n "${customcmd}" ]
+then
+    echo ""
+    echo "Executing custom commands"
+    ${customcmd}
+fi
 
 # Look for duplicates reads with picard-tools
 if [ $markduplicates -eq "1" ]
@@ -246,7 +268,7 @@ do
     stdout=`echo $i | sed "s/.sorted.bam/.noduplog/g"`
 
     # Use picard tools MarkDuplicates with removal of duplicates and index creation options.
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard MarkDuplicates I=$dir/$i O=$dir2/$out METRICS_FILE=$dir2/$logs/$metrics REMOVE_DUPLICATES=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true 2>$dir2/$logs/$stdout
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $picard MarkDuplicates I=$dir/$i O=$dir2/$out METRICS_FILE=$dir2/$logs/$metrics REMOVE_DUPLICATES=true ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true 2>$dir2/$logs/$stdout
 done
 echo ""
 echo "-- Duplicates removed --"
@@ -297,14 +319,14 @@ echo ""
 
 echo "Processing" $i
 
-    # Determining (small) suspicious intervals which are likely in need of realignment
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    # Determining (small) suspicious intervals which are likely in need of realignment (technically not required on GATK > 3.6)
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T RealignerTargetCreator -R $fasta_refgenome -I $dir2/$i -o $dir2/$intervals -known $millsgold -known $onekGph1 -L $regions -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
-    # Running the realigner over those intervals
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    # Running the realigner over those intervals (technically not required on GATK > 3.6)
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T IndelRealigner -R $fasta_refgenome -I $dir2/$i -o $dir2/$realigned -targetIntervals $dir2/$intervals `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     # When using paired end data, the mate information must be fixed, as alignments may change during the realignment process
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $picard FixMateInformation I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $picard FixMateInformation I=$dir2/$realigned O=$dir2/$matefixed SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true
 
 echo ""
 echo "-- Local realignment done --"
@@ -314,8 +336,8 @@ echo ""
 
     echo "Processing" $matefixed
     # Quality score recalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T BaseRecalibrator -R $fasta_refgenome -I $dir2/$matefixed -knownSites $dbSNP -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o $dir2/$recal_data -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T PrintReads -R $fasta_refgenome -I $dir2/$matefixed -BQSR $dir2/$recal_data -o $dir2/$recal `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
 echo ""
 echo "-- Recalibration done --"
@@ -327,7 +349,7 @@ echo ""
     date
     echo "Processing" $recal
     # Produce raw SNP calls
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T HaplotypeCaller --emitRefConfidence GVCF -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -nct $threads -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T HaplotypeCaller --emitRefConfidence GVCF -R $fasta_refgenome -I $dir2/$recal -D $dbSNP -o $dir2/$rawSNP -nct $threads -L $regions `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
 echo ""
 echo "-- SNPs called --"
@@ -341,7 +363,7 @@ then
 
     echo "Processing" $recal
     # Will compute all coverage informations needed
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverageout -L $regions -ct 10 -ct 15 -ct 30 `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T DepthOfCoverage -R $fasta_refgenome -I $dir2/$recal -o $dir2/$coverageout -L $regions -ct 10 -ct 15 -ct 30 `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     echo ""
     echo "-- Coverage computed --"
@@ -425,49 +447,60 @@ fi
     # Get a list of all .g.vcf files
     gvcf=`find $dir2/ -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'`
 
-if [ -n "${popgvcf}" ]
+
+if [ -n "${popfolder}" ]
 then
 
-    if [ ${popgvcf: -1} == "/" ]
+    if [ ${popfolder: -1} == "/" ]
     then
-        popgvcf=${popgvcf%?}
+        popfolder=${popfolder%?}
     fi
  
-    allgvcf=`find $popgvcf -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'`
+    allgvcf=`find $popfolder -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'`
 
-    echo "Use samples from ${popgvcf}/ for VQSR agreggation"
+    echo "Use samples from ${popfolder}/ for VQSR agreggation"
     echo ""
     
     # Produce raw SNP calls from all .g.vcf files
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V ${allgvcf} -o $dir2/aggregate.vcf -nt $threads
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V ${allgvcf} -o ${popfolder}/aggregate.vcf -nt $threads
+    
+    popgvcf = "${popfolder}/aggregate.vcf"
+
+fi
+
+if [ -n "${popgvcf}" ]
+then
+
+    if [ ${popgvcf: -4} == ".vcf"  ]
+    then
+        echo "Invalid vcf file detected. Is it a .vcf file?"
+    fi
 
 fi
     
     # Produce raw SNP calls from all .g.vcf files
     echo "Performing Joint Genotyping"
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V ${gvcf} -o $dir2/$rawSNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T GenotypeGVCFs -R $fasta_refgenome -D $dbSNP -V ${gvcf} -o $dir2/$rawSNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped"; fi`
 
     # Variants recalibration
     echo ""
     echo "Variant recalibration"
 
     # Pass #1 for SNPs
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$rawSNP `if [ -n "${popgvcf}" ]; then echo "-aggregate ${dir2}/aggregate.vcf"; fi` -resource:hapmap,known=false,training=true,truth=true,prior=15.0 $hapmap -resource:omni,known=false,training=true,truth=false,prior=12.0 $omni -resource:1000G,known=false,training=true,truth=false,prior=10.0 $onekGph1 -resource:dbsnp,known=true,training=false,truth=false,prior=6.0 $dbSNP -an QD -an MQ -an MQRankSum -an ReadPosRankSum -an FS -an SOR -an InbreedingCoeff -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_SNP.recal -tranchesFile $dir2/recalibrate_SNP.tranches -rscriptFile $dir2/recalibrate_SNP_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$rawSNP `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` -resource:hapmap,known=false,training=true,truth=true,prior=15.0 $hapmap -resource:omni,known=false,training=true,truth=false,prior=12.0 $omni -resource:1000G,known=false,training=true,truth=false,prior=10.0 $onekGph1 -resource:dbsnp,known=true,training=false,truth=false,prior=6.0 $dbSNP -an QD -an MQ -an MQRankSum -an ReadPosRankSum -an FS -an SOR -an InbreedingCoeff -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_SNP.recal -tranchesFile $dir2/recalibrate_SNP.tranches -rscriptFile $dir2/recalibrate_SNP_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
 
     # Pass #2 for SNPs ApplyRecalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$rawSNP -tranchesFile $dir2/recalibrate_SNP.tranches -recalFile $dir2/recalibrate_SNP.recal -o $dir2/$recalSNP --ts_filter_level 99.5 -mode SNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$rawSNP -tranchesFile $dir2/recalibrate_SNP.tranches -recalFile $dir2/recalibrate_SNP.recal -o $dir2/$recalSNP --ts_filter_level 99.5 -mode SNP -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
 
     # Pass #3 for Indels
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$recalSNP `if [ -n "${popgvcf}" ]; then echo "-aggregate ${dir2}/aggregate.vcf"; fi` --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 $millsgold -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 $dbSNP -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_INDEL.recal -tranchesFile $dir2/recalibrate_INDEL.tranches -rscriptFile $dir2/recalibrate_INDEL_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T VariantRecalibrator -R $fasta_refgenome -input $dir2/$recalSNP `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 $millsgold -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 $dbSNP -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile $dir2/recalibrate_INDEL.recal -tranchesFile $dir2/recalibrate_INDEL.tranches -rscriptFile $dir2/recalibrate_INDEL_plots.R -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
 
     # Pass #4 for Indels ApplyRecalibration
-    java -Xmx"$mem"g -Djava.io.tmpdir=$dir2/tmp -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$recalSNP -tranchesFile $dir2/recalibrate_INDEL.tranches -recalFile $dir2/recalibrate_INDEL.recal -o $dir2/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
+    java -Xmx"$mem"g -Djava.io.tmpdir=${tmp} -jar $gatk -T ApplyRecalibration -R $fasta_refgenome -input $dir2/$recalSNP -tranchesFile $dir2/recalibrate_INDEL.tranches -recalFile $dir2/recalibrate_INDEL.recal -o $dir2/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt $threads `if [ -n "$ped" ]; then echo "-ped $ped -pedValidationType SILENT"; fi`
     
 	# Remove indermediate files
     [ -f $dir2/${recalSNP} ] && rm $dir2/${recalSNP}
     [ -f $dir2/${recalSNP}.idx ] && rm $dir2/${recalSNP}.idx
-    [ -f $dir2/aggregate.vcf ] && rm $dir2/aggregate.vcf
-    [ -f $dir2/aggregate.vcf.idx ] && rm $dir2/aggregate.vcf.idx
     [ -f $dir2/recalibrate_SNP.tranches ] && rm $dir2/recalibrate_SNP.tranches
     [ -f $dir2/recalibrate_SNP.recal ] && rm $dir2/recalibrate_SNP.recal
     [ -f $dir2/recalibrate_SNP.recal.idx ] && rm $dir2/recalibrate_SNP.recal.idx
@@ -492,7 +525,7 @@ echo ""
     echo ""
 
     # Annotate using annovar
-    $annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500siv2_all,1000g2015feb_all,snp138,ljb26_all,clinvar_20150629 --operation g,r,r,r,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove #No csv output as annovar result file is full of commas by itself.
+    $annovar/table_annovar.pl --buildver hg19 $dir2/$annovarfile $annovar/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500siv2_all,1000g2015feb_all,avsnp144,dbnsfp30a,dbnsfp31a_interpro,dbscsnv11,clinvar_20150629,exac03,kaviar_20150923,hrcr1 --operation g,r,r,r,f,f,f,f,f,f,f,f,f,f --otherinfo --outfile $dir2/$snpssummary --remove #-thread $threads #No csv output as annovar result file is full of commas by itself.
 
     # Fixing headers and cleaning files
     sed -i "1s/Otherinfo/Otherinfo\t\t\t`cat $dir2/$filteredSNP | grep CHROM | sed 's/#//g'`/g" $dir2/$snpssummary.hg19_multianno.txt        # Fixing headers to add back sample names in annovar csv output files
@@ -533,7 +566,7 @@ echo ""
 echo "-- Archive ready at $dir2/Results.tar.gz --"
 
     # Remove indermediate files
-    [ -d $dir2/tmp ] && rm -rf $dir2/tmp ## Temporary folder used by Java
+    [ -d ${tmp} ] && rm -rf ${tmp} ## Temporary folder used by Java
     [ -d $dir2/logs ] && rm -rf $dir2/logs ## Logs, for troubleshooting
 
 if [ -n "${iftttkey}" ]
