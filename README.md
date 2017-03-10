@@ -8,7 +8,37 @@ Workflow scripts:
 -----------------
 
 
-## sh_bowtie2_AlignAll.sh
+## sh_WES.sh (SLURM compatible)
+
+Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+
+# Description
+
+This script will process fastq(.gz) files and align them to a reference genome using bowtie2.
+It will then use Picard and GATK following GATK according to June 2016 best practices workflow.
+SNPs will then be annotated with ANNOVAR.
+
+# Options
+
+Can call trimmomatic, FastQC and compute coverage.
+Settings can be modified by using a customized config_WES.ini file.
+
+## sh_RNAseq.sh (SLURM compatible)
+
+Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+
+# Description
+
+This script will process fastq(.gz) files and align them to a reference genome using either STAR (recommended), hishat2 or tophat2.
+Differential expression will then be computed using cufflinks.
+If STAR is used then RSEM will also be used to generate additional files for DESeq2.
+
+# Options
+
+Can call trimmomatic and FastQC.
+Settings can be modified by using a customized config_RNAseq.ini file.
+
+## sh_bowtie2_AlignAll.sh (deprecated)
 
 Usage: sh_bowtie2_AlignAll.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> [/path/to/config/file.ini]
 
@@ -22,7 +52,7 @@ This script will, for all samples in input folder:
 - convert .sam to .bam.
 - Sort and index .bam file.
 
-## sh_gatkSNPcalling.sh
+## sh_gatkSNPcalling.sh (deprecated)
 
 Usage: sh_gatkSNPcalling.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
 
@@ -42,7 +72,7 @@ This script will, for all samples:
 - Optional: Can trigger an IFTTT event using the maker channel.
 
 
-## sh_FastQToSNPsCall.sh
+## sh_FastQToSNPsCall.sh (deprecated)
 
 Usage: sh_FastQToSNPsCall.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
 
