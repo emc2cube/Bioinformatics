@@ -3,7 +3,7 @@
 # Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
 #
 ##############################################################
-##					  Description					        ##
+##                       Description                        ##
 ##############################################################
 #
 # This script will process fastq(.gz) files and align them to
@@ -14,7 +14,7 @@
 # generate additional files for DESeq2.
 #
 ##############################################################
-##				  Configurable variables				    ##
+##                  Configurable variables                  ##
 ##############################################################
 #
 ## Hardware options

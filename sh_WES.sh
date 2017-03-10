@@ -3,7 +3,7 @@
 # Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
 #
 ##############################################################
-##					  Description					 	    ##
+##                       Description                        ##
 ##############################################################
 #
 # This script will process fastq(.gz) files and align them to
@@ -13,7 +13,7 @@
 # SNPs will then be annotated with ANNOVAR.
 #
 ##############################################################
-##				  Configurable variables				    ##
+##                  Configurable variables                  ##
 ##############################################################
 #
 ## Hardware options
