@@ -2,10 +2,6 @@
 #########################
 configs
 
-# Jason's tools #
-#################
-pyadapter_trim.py
-
 # Backups and old files #
 #########################
 *.back

@@ -17,6 +17,7 @@ Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/pa
 This script will process fastq(.gz) files and align them to a reference genome using bowtie2.
 It will then use Picard and GATK following GATK according to June 2016 best practices workflow.
 SNPs will then be annotated with ANNOVAR.
+Include a failsafe, if a job fails, it will be requeued once in case of a hardware failure.
 
 # Options
 
@@ -31,7 +32,8 @@ Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [
 
 This script will process fastq(.gz) files and align them to a reference genome using either STAR (recommended), hishat2 or tophat2.
 Differential expression will then be computed using cufflinks.
-If STAR is used then RSEM will also be used to generate additional files for DESeq2.
+If STAR is used then RSEM will also be used to generate gene read counts, pairwise comparison matrices will be created and DESeq2 analysis will be performed.
+Include a failsafe, if a job fails, it will be requeued once in case of a hardware failure.
 
 # Options
 
