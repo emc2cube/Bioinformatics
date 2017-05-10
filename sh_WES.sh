@@ -388,21 +388,21 @@ then
 	if [ ${blank} -eq "0" ]
 	then
 		# Remove all Undetermined_* and BLANK* files
-		ls ${dir}/ --hide=Undetermined_* --hide=BLANK* | grep R1 > ${dir2}/files1
-		ls ${dir}/ --hide=Undetermined_* --hide=BLANK* | grep R2 > ${dir2}/files2
+		ls ${dir}/ --hide=Undetermined_* --hide=BLANK* | grep _R1 > ${dir2}/files1
+		ls ${dir}/ --hide=Undetermined_* --hide=BLANK* | grep _R2 > ${dir2}/files2
 		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
 	else
 		# Remove all Undetermined_* files
-		ls ${dir}/ --hide=Undetermined_* | grep R1 > ${dir2}/files1
-		ls ${dir}/ --hide=Undetermined_* | grep R2 > ${dir2}/files2
+		ls ${dir}/ --hide=Undetermined_* | grep _R1 > ${dir2}/files1
+		ls ${dir}/ --hide=Undetermined_* | grep _R2 > ${dir2}/files2
 		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
 	fi
 else
 	if [ ${blank} -eq "0" ]
 	then
 		# Remove all BLANK* files
-		ls ${dir}/ --hide=BLANK* | grep R1 > ${dir2}/files1
-		ls ${dir}/ --hide=BLANK* | grep R2 > ${dir2}/files2
+		ls ${dir}/ --hide=BLANK* | grep _R1 > ${dir2}/files1
+		ls ${dir}/ --hide=BLANK* | grep _R2 > ${dir2}/files2
 		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
 	else
 		# Process all the files!
@@ -454,7 +454,7 @@ do
 		# General SLURM parameters
 		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi` `if [ ! -z ${threads} ] && [ ${threads} -gt "8" ]; then echo "--cpus-per-task=8"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi` `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "--cpus-per-task=2"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
 		echo "#SBATCH --time=1:00:00" >> ${dir2}/${samplename}_${job}.sbatch
 		if [ -n "${SLURMemail}" ]
 		then
@@ -478,7 +478,7 @@ do
 		
 		# Job specific commands
 		# Trim fastq files with trimmomatic
-		echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar PE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "8" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${dir}/${read2} ${dir2}/${trimout1} ${unpaired1} ${dir2}/${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar PE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${dir}/${read2} ${dir2}/${trimout1} ${unpaired1} ${dir2}/${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 		# Cleaning commands
 		# remove .sbatch
@@ -554,13 +554,13 @@ do
 	
 	# Job specific commands
 	# Perform alignment with bowtie
-	echo "bowtie2 -p ${threads} --phred33 --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${bt_refgenome} -S ${dir2}/${samout} -1 ${dir2}/${trimout1} -2 ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "bowtie2 -p ${threads} --phred33 --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${bt_refgenome} -S ${dir2}/${samout} -1 ${dir2}/${trimout1} -2 ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	# Convert .sam to .bam with optional filter on MapQ quality score
-	echo "samtools view -bS -q ${mapq} -o ${dir2}/${bamout} ${dir2}/${samout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "samtools view -bS -q ${mapq} -o ${dir2}/${bamout} ${dir2}/${samout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	# Sort .bam file
-	echo "samtools sort -@ ${threads} -o ${dir2}/${bamsortedout} -O bam -T ${tmp} ${dir2}/${bamout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "samtools sort -@ ${threads} -o ${dir2}/${bamsortedout} -O bam -T ${tmp} ${dir2}/${bamout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	# Index sorted .bam
-	echo "samtools index ${dir2}/${bamsortedout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "samtools index ${dir2}/${bamsortedout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# Cleaning commands
 	# remove trim.fastq files from destination folder
@@ -619,7 +619,7 @@ do
 		fi
 		
 		# Job specific commands
-		echo "fastqc -o ${dir2}/ --noextract ${dir2}/${trimout1} ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "fastqc -o ${dir2}/ --noextract ${dir2}/${trimout1} ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 		
 		# Cleaning commands
 		# remove trim.fastq files from destination folder
@@ -682,7 +682,7 @@ do
 	
 	# Job specific commands
 	# Use picard tools MarkDuplicates with removal of duplicates and index creation options.
-	echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "64" ]; then echo "64"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${picard} MarkDuplicates I=${dir2}/${bamsortedout} O=${dir2}/${dupout} METRICS_FILE=${dir2}/${logs}/${dupmetrics} REMOVE_DUPLICATES=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true SORTING_COLLECTION_SIZE_RATIO=0.20 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "64" ]; then echo "64"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${picard} MarkDuplicates I=${dir2}/${bamsortedout} O=${dir2}/${dupout} METRICS_FILE=${dir2}/${logs}/${dupmetrics} REMOVE_DUPLICATES=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true SORTING_COLLECTION_SIZE_RATIO=0.20 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# Cleaning commands
 	# remove sorted files
@@ -751,11 +751,11 @@ do
 	
 		# Job specific commands
 		# Determining (small) suspicious intervals which are likely in need of realignment (technically not required on GATK > 3.6)
-		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T RealignerTargetCreator -R ${fasta_refgenome} -I ${dir2}/${dupout} -o ${dir2}/${intervals} -known ${millsgold} -known ${onekGph1} -L ${regions} -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T RealignerTargetCreator -R ${fasta_refgenome} -I ${dir2}/${dupout} -o ${dir2}/${intervals} -known ${millsgold} -known ${onekGph1} -L ${regions} -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 		# Running the realigner over those intervals (technically not required on GATK > 3.6)
-		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T IndelRealigner -R ${fasta_refgenome} -I ${dir2}/${dupout} -o ${dir2}/${realigned} -targetIntervals ${dir2}/${intervals} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T IndelRealigner -R ${fasta_refgenome} -I ${dir2}/${dupout} -o ${dir2}/${realigned} -targetIntervals ${dir2}/${intervals} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 		# When using paired end data, the mate information must be fixed, as alignments may change during the realignment process
-		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${picard} FixMateInformation I=${dir2}/${realigned} O=${dir2}/${matefixed} SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${picard} FixMateInformation I=${dir2}/${realigned} O=${dir2}/${matefixed} SO=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 		# Cleaning commands
 		# remove intermediate files
@@ -816,8 +816,8 @@ do
 	fi
 	
 	# Job specific commands
-	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T BaseRecalibrator -R ${fasta_refgenome} -I ${dir2}/${dupout} -knownSites ${dbSNP} -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o ${dir2}/${recal_data} -L ${regions} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T PrintReads -R ${fasta_refgenome} -I ${dir2}/${dupout} -BQSR ${dir2}/${recal_data} -o ${dir2}/${recal} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T BaseRecalibrator -R ${fasta_refgenome} -I ${dir2}/${dupout} -knownSites ${dbSNP} -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o ${dir2}/${recal_data} -L ${regions} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T PrintReads -R ${fasta_refgenome} -I ${dir2}/${dupout} -BQSR ${dir2}/${recal_data} -o ${dir2}/${recal} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# Cleaning commands
 	# remove deduplicated files
@@ -875,7 +875,7 @@ do
 
 	# Job specific commands
 	# Produce raw SNP calls
-	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T HaplotypeCaller --emitRefConfidence GVCF -R ${fasta_refgenome} -I ${dir2}/${recal} -D ${dbSNP} -o ${dir2}/${rawgvcf} -L ${regions} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T HaplotypeCaller --emitRefConfidence GVCF -R ${fasta_refgenome} -I ${dir2}/${recal} -D ${dbSNP} -o ${dir2}/${rawgvcf} -L ${regions} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# Cleaning commands
 	# remove .sbatch
@@ -932,7 +932,7 @@ do
 
 		# Job specific commands
 		# Will compute all coverage informations needed
-		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T DepthOfCoverage -R ${fasta_refgenome} -I ${dir2}/${recal} -o ${dir2}/${coverageout} -L ${regions} -ct 10 -ct 15 -ct 30 `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T DepthOfCoverage -R ${fasta_refgenome} -I ${dir2}/${recal} -o ${dir2}/${coverageout} -L ${regions} -ct 10 -ct 15 -ct 30 `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 		# Cleaning commands
 		# Remove indermediate files
@@ -1073,7 +1073,7 @@ then
 
 	# Job specific commands
 	# Produce raw SNP calls from all .g.vcf files
-	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T GenotypeGVCFs -R ${fasta_refgenome} -D ${dbSNP} -V `find ${popfolder} -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'` -o ${popfolder}/aggregate.vcf -nt ${threads} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T GenotypeGVCFs -R ${fasta_refgenome} -D ${dbSNP} -V `find ${popfolder} -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'` -o ${popfolder}/aggregate.vcf -nt ${threads} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	
 	# Cleaning commands
 	# remove .sbatch
@@ -1132,16 +1132,16 @@ fi
 
 # Job specific commands
 # Produce raw SNP calls from all .g.vcf files
-echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T GenotypeGVCFs -R ${fasta_refgenome} -D ${dbSNP} -V ${rawgvcfs} -o ${dir2}/${rawSNP} -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T GenotypeGVCFs -R ${fasta_refgenome} -D ${dbSNP} -V ${rawgvcfs} -o ${dir2}/${rawSNP} -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 # Variants recalibration
 # Pass #1 for SNPs
-echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T VariantRecalibrator -R ${fasta_refgenome} -input ${dir2}/${rawSNP} `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` -resource:hapmap,known=false,training=true,truth=true,prior=15.0 ${hapmap} -resource:omni,known=false,training=true,truth=false,prior=12.0 ${omni} -resource:1000G,known=false,training=true,truth=false,prior=10.0 ${onekGph1} -resource:dbsnp,known=true,training=false,truth=false,prior=6.0 ${dbSNP} -an QD -an MQ -an MQRankSum -an ReadPosRankSum -an FS -an SOR -an InbreedingCoeff -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile ${dir2}/recalibrate_SNP.recal -tranchesFile ${dir2}/recalibrate_SNP.tranches -rscriptFile ${dir2}/recalibrate_SNP_plots.R -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T VariantRecalibrator -R ${fasta_refgenome} -input ${dir2}/${rawSNP} `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` -resource:hapmap,known=false,training=true,truth=true,prior=15.0 ${hapmap} -resource:omni,known=false,training=true,truth=false,prior=12.0 ${omni} -resource:1000G,known=false,training=true,truth=false,prior=10.0 ${onekGph1} -resource:dbsnp,known=true,training=false,truth=false,prior=6.0 ${dbSNP} -an QD -an MQ -an MQRankSum -an ReadPosRankSum -an FS -an SOR -an InbreedingCoeff -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile ${dir2}/recalibrate_SNP.recal -tranchesFile ${dir2}/recalibrate_SNP.tranches -rscriptFile ${dir2}/recalibrate_SNP_plots.R -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 # Pass #2 for SNPs ApplyRecalibration
-echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T ApplyRecalibration -R ${fasta_refgenome} -input ${dir2}/${rawSNP} -tranchesFile ${dir2}/recalibrate_SNP.tranches -recalFile ${dir2}/recalibrate_SNP.recal -o ${dir2}/${recalSNP} --ts_filter_level 99.5 -mode SNP -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T ApplyRecalibration -R ${fasta_refgenome} -input ${dir2}/${rawSNP} -tranchesFile ${dir2}/recalibrate_SNP.tranches -recalFile ${dir2}/recalibrate_SNP.recal -o ${dir2}/${recalSNP} --ts_filter_level 99.5 -mode SNP -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 # Pass #3 for Indels
-echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T VariantRecalibrator -R ${fasta_refgenome} -input ${dir2}/${recalSNP} `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 ${millsgold} -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 ${dbSNP} -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile ${dir2}/recalibrate_INDEL.recal -tranchesFile ${dir2}/recalibrate_INDEL.tranches -rscriptFile ${dir2}/recalibrate_INDEL_plots.R -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T VariantRecalibrator -R ${fasta_refgenome} -input ${dir2}/${recalSNP} `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 ${millsgold} -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 ${dbSNP} -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile ${dir2}/recalibrate_INDEL.recal -tranchesFile ${dir2}/recalibrate_INDEL.tranches -rscriptFile ${dir2}/recalibrate_INDEL_plots.R -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 # Pass #4 for Indels ApplyRecalibration
-echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T ApplyRecalibration -R ${fasta_refgenome} -input ${dir2}/${recalSNP} -tranchesFile ${dir2}/recalibrate_INDEL.tranches -recalFile ${dir2}/recalibrate_INDEL.recal -o ${dir2}/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T ApplyRecalibration -R ${fasta_refgenome} -input ${dir2}/${recalSNP} -tranchesFile ${dir2}/recalibrate_INDEL.tranches -recalFile ${dir2}/recalibrate_INDEL.recal -o ${dir2}/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	
 # Cleaning commands
 # Remove indermediate files
@@ -1209,11 +1209,11 @@ fi
 
 # Job specific commands
 # Convert to ANNOVAR format from GATK .vcf file
-echo "${annovar}/convert2annovar.pl --format vcf4 -allsample -withfreq --includeinfo ${dir2}/${filteredSNP} --outfile ${dir2}/${annovarfile} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "${annovar}/convert2annovar.pl --format vcf4 -allsample -withfreq --includeinfo ${dir2}/${filteredSNP} --outfile ${dir2}/${annovarfile} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 # Annotate using ANNOVAR
 #echo "${annovar}/table_annovar.pl --buildver hg19 ${dir2}/${annovarfile} ${annovar}/humandb/ --protocol refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500siv2_all,1000g2015aug_all,exac03,gme,kaviar_20150923,avsnp147,dbnsfp33a,dbnsfp31a_interpro,dbscsnv11,clinvar_20170130,intervar_20170202,hrcr1,revel,mcap --operation g,r,r,r,f,f,f,f,f,f,f,f,f,f,f,f,f,f --otherinfo --outfile ${dir2}/${snpssummary} --remove -thread ${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-echo "${annovar}/table_annovar.pl --buildver ${buildver} ${dir2}/${annovarfile} ${annovar}/humandb/ --protocol ${protocol} --operation ${operation} --otherinfo --outfile ${dir2}/${snpssummary} --remove -thread ${threads} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then exit 1; else touch ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+echo "${annovar}/table_annovar.pl --buildver ${buildver} ${dir2}/${annovarfile} ${annovar}/humandb/ --protocol ${protocol} --operation ${operation} --otherinfo --outfile ${dir2}/${snpssummary} --remove -thread ${threads} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 # Fixing headers and cleaning files
 echo "sed -i \"1s/Otherinfo/Otherinfo\t\t\t\`cat ${dir2}/${filteredSNP} | grep CHROM | sed 's/#//g'\`/g\" ${dir2}/${snpssummary}.hg19_multianno.txt" >> ${dir2}/${samplename}_${job}.sbatch		# Fixing headers to add back sample names in annovar csv output files
