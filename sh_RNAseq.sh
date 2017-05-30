@@ -704,9 +704,9 @@ job="matrix"
 samplename="rsem"
 
 # variables
-declare -a samplesarray=(`echo ${groupedsamples} | sed 's/,/ /g'`)
 declare -a labelsarray=(`echo ${labels} | sed 's/,/ /g'`)
-replicates=$(( ${#samplesarray[@]} / ${#labelsarray[@]} ))
+declare -a samplesarray=(`echo ${groupedsamples}`)
+declare -a replicatesarray
 
 # General SLURM parameters
 echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
@@ -743,8 +743,42 @@ fi
 # Job specific commands
 mkdir -p ${dir2}/DESeq2
 
-# Generate comparison matrices with all samples, will probably need to customize R script afterwards, only if more than 2 conditions
-if [ ${#labelsarray[@]} -lt 2 ]
+# Generate an array with sample replicate names
+repN="0"
+while [ ${repN} -lt ${#labelsarray[@]} ]
+do
+#	declare -a `echo ${labelsarray[${repN}]}`
+	replicatesarray[${repN}]=`echo ${samplesarray[${repN}]} | sed 's/,/ /g'`
+	repN=$(( $repN + 1 ))
+done
+
+# Generate pair-wise comparison matrices
+condA="0"
+condB="0"
+while [ ${condA} -lt ${#labelsarray[@]} ]
+do
+	condB=$((condA + 1))
+	while [ ${condB} -lt ${#labelsarray[@]} ]
+	do
+		echo "rsem-generate-data-matrix ${dir2}/`echo ${replicatesarray[${condA}]} ${replicatesarray[${condB}]} | sed \"s# #.rsem.genes.results ${dir2}/#g\"`.rsem.genes.results > ${dir2}/DESeq2/${labelsarray[${condA}]}"_vs_"${labelsarray[${condB}]}.genes.matrix || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix >> ${dir2}/matrices
+		echo '#!/usr/bin/env Rscript' > ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		chmod +x ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo '' >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo '# variables' >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo "table <- \"${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo "cond1 <- \"${labelsarray[${condA}]}\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo "rep1 <- \"`wc -w <<< ${replicatesarray[${condA}]} | sed 's/ //g'`\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo "cond2 <- \"${labelsarray[${condB}]}\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo "rep2 <- \"`wc -w <<< ${replicatesarray[${condB}]} | sed 's/ //g'`\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		echo "output <- \"${dir2}/DESeq2/\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
+		condB=$((condB + 1))
+	done
+	condA=$((condA + 1))
+done
+
+# Generate comparison matrices with all samples, only if more than 2 conditions
+if [ ${#labelsarray[@]} -gt 2 ]
 then
 	condN="0"
 	echo "rsem-generate-data-matrix ${dir2}/`echo ${groupedsamples} | sed \"s# #.rsem.genes.results ${dir2}/#g;s#,#.rsem.genes.results ${dir2}/#g\"`.rsem.genes.results > ${dir2}/DESeq2/`basename ${dir2}`_all.genes.matrix || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
@@ -754,35 +788,12 @@ then
 	echo "table <- \"${dir2}/DESeq2/`basename ${dir2}`_all.genes.matrix\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
 	while [ ${condN} -lt ${#labelsarray[@]} ]
 	do
-		echo "cond$(( $condN + 1 )) <- \"${labelsarray[${condN}]}\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-		conditions="`if [ -n "${conditions}" ]; then echo "${conditions}, "; fi`rep(cond$(( $condN + 1 )), ncol(data)/${#labelsarray[@]})"
+		echo "cond$(( ${condN} + 1 )) <- \"${labelsarray[${condN}]}\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
+		conditionsall="`if [ -n "${conditionsall}" ]; then echo "${conditionsall}, "; fi`rep(cond$(( ${condN} + 1 )), `wc -w <<< ${replicatesarray[${condN}]}`)"
 		condN=$(( $condN + 1 ))
 	done
 	echo "output <- \"${dir2}/DESeq2/`basename ${dir2}`_\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
 fi
-
-# Generate pair-wise comparison matrices
-condA="0"
-condB="0"
-while [ ${condA} -lt ${#samplesarray[@]} ]
-do
-	condB=$((condA + replicates ))
-	while [ ${condB} -lt ${#samplesarray[@]} ]
-	do
-		echo "rsem-generate-data-matrix ${dir2}/`echo ${samplesarray[@]:${condA}:${replicates}} ${samplesarray[@]:${condB}:${replicates}} | sed \"s# #.rsem.genes.results ${dir2}/#g\"`.rsem.genes.results > ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}"_vs_"${labelsarray[$((condB / replicates))]}.genes.matrix || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		echo ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.genes.matrix >> ${dir2}/matrices
-		echo '#!/usr/bin/env Rscript' > ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		chmod +x ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		echo '' >> ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		echo '# variables' >> ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		echo "table <- \"${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.genes.matrix\"" >> ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		echo "cond1 <- \"${labelsarray[$((condA / replicates))]}\"" >> ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		echo "cond2 <- \"${labelsarray[$((condB / replicates))]}\"" >> ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		echo "output <- \"${dir2}/DESeq2/\"" >> ${dir2}/DESeq2/${labelsarray[$((condA / replicates))]}_vs_${labelsarray[$((condB / replicates))]}.DESeq2.R
-		condB=$((condB + replicates))
-	done
-	condA=$((condA + replicates))
-done
 
 # Cleaning commands
 # remove .sbatch
@@ -803,7 +814,7 @@ echo "-- Queuing DESeq2 jobs --"
 echo ""
 
 # Create R script for all sample matrix, only if more than 2 conditions
-if [ ${#labelsarray[@]} -lt 2 ]
+if [ ${#labelsarray[@]} -gt 2 ]
 then
 	# variables
 	samplename="`basename ${dir2}`_all"
@@ -860,7 +871,7 @@ data=read.table(table, header=TRUE, row.names=1, check.names=FALSE, stringsAsFac
 colnames(data) <- sub('.rsem.genes.results', '', basename(colnames(data)))						# fix sample names in column names
 cols=c(1:ncol(data))																			# get the number of columns
 data[,cols]=apply(data[,cols], 2, function(x) as.numeric(as.integer(x)))						# format the matrix as integer numbers for DESeq2 to be happy
-conditions <- factor(c(${conditions}))	# generate a comma-separated list of conditions/treatments for each sample. Replicates should be named the same.
+conditions <- factor(c(${conditionsall}))														# generate a comma-separated list of conditions/treatments for each sample. Replicates should be named the same.
 samples=as.data.frame((colnames(data)))															# make samples list for DESeq2
 samples <- cbind(samples, conditions)
 colnames(samples)=c("sample","condition") 
@@ -907,8 +918,8 @@ garbage <- dev.off() # Save to file
 hmcol <- colorRampPalette(brewer.pal(9, 'RdYlBu'))(100)
 counts <- counts(dds,normalized=TRUE)															# Get normalized read counts (sorted by padj)
 counts <- counts[apply(counts, 1, function(row) all(row !=0 )),]								# remove genes with zero reads
-## You will probably need to change cond1 and cond2 to perform a meaningful comparison here
-respairwise = results(dds, contrast=c("condition",cond2,cond4))									# Select comparison to perform (for log2 changes)
+## You will probably need to change conditions to perform a meaningful comparison here
+respairwise = results(dds, contrast=c("condition",cond0,cond${#labelsarray[@]}))									# Select comparison to perform (for log2 changes)
 sig <- rownames(respairwise[!is.na(respairwise\$padj) & respairwise\$padj<0.05 & abs(respairwise\$log2FoldChange)>=1,])[1:30]		# Select the first 30 significant hits (sorted by padj)
 sig <- sig[!is.na(sig)]					
 sigcounts <- counts(dds,normalized=TRUE)[sig,]													# Get normalized read counts (sorted by padj) for significan genes
@@ -1014,7 +1025,7 @@ data=read.table(table, header=TRUE, row.names=1, check.names=FALSE, stringsAsFac
 colnames(data) <- sub('.rsem.genes.results', '', basename(colnames(data)))						# fix sample names in column names
 cols=c(1:ncol(data))																			# get the number of columns
 data[,cols]=apply(data[,cols], 2, function(x) as.numeric(as.integer(x)))						# format the matrix as integer numbers for DESeq2 to be happy
-conditions <- factor(c(rep(cond1, ncol(data)/2), rep(cond2, ncol(data)/2)))						# generate a comma-separated list of conditions/treatments for each sample. Replicates should be named the same.
+conditions <- factor(c(rep(cond1, rep1), rep(cond2, rep2)))										# generate a comma-separated list of conditions/treatments for each sample. Replicates should be named the same.
 samples=as.data.frame((colnames(data)))															# make samples list for DESeq2
 samples <- cbind(samples, conditions)
 colnames(samples)=c("sample","condition") 
@@ -1419,7 +1430,7 @@ then
 fi
 	
 # Require previous job successful completion
-echo "#SBATCH --dependency=afterok:${SBcuffdiff##* }:${SBcuffnorm##* }`if [ -n \"${SBfqcIDs}\" ]; then echo \"${SBfqcIDs}\"; fi``if [ -n \"${SBmatrix}\" ]; then echo \":${SBmatrix##* }\"; fi``if [ -n \"${SBdeseq2IDs}\" ]; then echo \"${SBdeseq2IDs}\"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
+echo "#SBATCH --dependency=afterok:`if [ -n \"${SBcuffdiff##* }\" ]; then echo \"${SBcuffdiff##* }\"; fi`:`if [ -n \"${SBcuffnorm##* }\" ]; then echo \"${SBcuffnorm##* }\"; fi``if [ -n \"${SBfqcIDs}\" ]; then echo \"${SBfqcIDs}\"; fi``if [ -n \"${SBmatrix}\" ]; then echo \":${SBmatrix##* }\"; fi``if [ -n \"${SBdeseq2IDs}\" ]; then echo \"${SBdeseq2IDs}\"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
 
 # General commands
 echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -1430,24 +1441,26 @@ fi
 
 # Job specific commands
 # Creating folders for archive
-echo "[ -f ${dir2}/Results.tar.gz ] && rm ${dir2}/Results.tar.gz" >> ${dir2}/${samplename}_${job}.sbatch
+echo "[ -f ${dir2}/Results_`basename ${dir2}`.tar.gz ] && rm ${dir2}/Results_`basename ${dir2}`.tar.gz" >> ${dir2}/${samplename}_${job}.sbatch
 echo "[ -d ${dir2}/Results_`basename ${dir2}` ] && rm -rf ${dir2}/Results_`basename ${dir2}`" >> ${dir2}/${samplename}_${job}.sbatch
 echo "mkdir -p ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-# List all csv, html, pdf and zip files
+# List all csv, html, pdf, results and zip files
 echo "csvarchive=\`ls ${dir2}/*.csv\`" >> ${dir2}/${samplename}_${job}.sbatch
 echo "htmlarchive=\`ls ${dir2}/*.html\`" >> ${dir2}/${samplename}_${job}.sbatch
 echo "pdfarchive=\`ls ${dir2}/*.pdf\`" >> ${dir2}/${samplename}_${job}.sbatch
+echo "resultsarchive=\`ls ${dir2}/*.results\`" >> ${dir2}/${samplename}_${job}.sbatch
 echo "ziparchive=\`ls ${dir2}/*.zip\`" >> ${dir2}/${samplename}_${job}.sbatch
 # Create an archive of all csv, html, pdf and zip files for easy download
 echo "for i in \${csvarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
 echo "for i in \${htmlarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
 echo "for i in \${pdfarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
+echo "for i in \${resultsarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
 echo "for i in \${ziparchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
 echo "cp -rf ${dir2}/ExpDiff ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
 echo "cp -rf ${dir2}/Normalized ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
 echo "cp -rf ${dir2}/DESeq2 ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
 echo "cp -rf ${dir2}/merged.gtf ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results.tar.gz Results_`basename ${dir2}`" >> ${dir2}/${samplename}_${job}.sbatch
+echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results_`basename ${dir2}`.tar.gz Results_`basename ${dir2}`" >> ${dir2}/${samplename}_${job}.sbatch
 if [ -n "${iftttkey}" ] && [ -n "${iftttevent}" ]
 then
 	# Trigger IFTTT maker channel event when it's ready, nice isn't it?
@@ -1455,6 +1468,10 @@ then
 fi
 
 # Cleaning commands
+# Remove error files upon successful completion. Comment to disable.
+echo "rm ${dir2}/*.err" >> ${dir2}/${samplename}_${job}.sbatch
+# Remove logs folder upon successfull completion. Comment to disable.
+echo "rm -rf ${dir2}/logs" >> ${dir2}/${samplename}_${job}.sbatch
 # Remove Temporary directory
 echo "rm -rf ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 # remove .sbatch
