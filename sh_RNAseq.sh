@@ -232,7 +232,18 @@ echo "Log files will be created in ${dir2}/${logs}"
 echo ""
 echo "-- Alignment options"
 echo ""
-echo "Using ${bt_refgenome} as reference genome"
+
+if [ align="star" ]
+then
+	echo "Using ${st_refgenome} as reference genome"
+elif [ align="hisat2" ]
+then 
+	echo "Using ${ha_refgenome} as reference genome"
+elif [ align="tophat2" ]
+then
+	echo "Using ${th_refgenome} as reference genome"
+fi
+
 if [ ${underdet} -eq "0" ]
 then
 	echo "Undetermined files will not be processed"

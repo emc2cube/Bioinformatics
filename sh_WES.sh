@@ -437,8 +437,8 @@ do
 	job="trim"
 
 	# Trimmomatic variables
-	trimout1="`basename ${read1} ${fileext}`.trim.fastq"
-	trimout2="`basename ${read2} ${fileext}`.trim.fastq"
+	trimout1="${dir2}/`basename ${read1} ${fileext}`.trim.fastq"
+	trimout2="${dir2}/`basename ${read2} ${fileext}`.trim.fastq"
 	if [ ! -z ${unpaired} ] && [ ${unpaired} -eq "1" ]
 	then
 		unpaired1="${dir2}/`basename ${read1} ${fileext}`.unpaired.fastq"  # Save unpaired reads
@@ -455,7 +455,7 @@ do
 		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
 		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi` `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "--cpus-per-task=2"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=1:00:00" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "#SBATCH --time=3:00:00" >> ${dir2}/${samplename}_${job}.sbatch
 		if [ -n "${SLURMemail}" ]
 		then
 			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -478,7 +478,7 @@ do
 		
 		# Job specific commands
 		# Trim fastq files with trimmomatic
-		echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar PE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${dir}/${read2} ${dir2}/${trimout1} ${unpaired1} ${dir2}/${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar PE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${dir}/${read2} ${trimout1} ${unpaired1} ${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 		# Cleaning commands
 		# remove .sbatch
@@ -489,8 +489,8 @@ do
 		echo -e "\t Trimming job queued"
 	else
 		# Need to rename some variables
-		trimout1="${read1}"
-		trimout2="${read2}"
+		trimout1="${dir}/${read1}"
+		trimout2="${dir}/${read2}"
 	fi
 	
 	
@@ -554,7 +554,7 @@ do
 	
 	# Job specific commands
 	# Perform alignment with bowtie
-	echo "bowtie2 -p ${threads} --phred33 --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${bt_refgenome} -S ${dir2}/${samout} -1 ${dir2}/${trimout1} -2 ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "bowtie2 -p ${threads} --phred33 --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${bt_refgenome} -S ${dir2}/${samout} -1 ${trimout1} -2 ${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	# Convert .sam to .bam with optional filter on MapQ quality score
 	echo "samtools view -bS -q ${mapq} -o ${dir2}/${bamout} ${dir2}/${samout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	# Sort .bam file
@@ -566,7 +566,7 @@ do
 	# remove trim.fastq files from destination folder
 	if ([ ! -z ${trim} ] && [ ${trim} -eq "1" ]) && ([ -z ${fastqc} ] || [ ${fastqc} -eq "0" ])
 	then
-		echo "rm ${dir2}/${trimout1} ${dir2}/${trimout2}" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "rm ${trimout1} ${trimout2}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
 	# remove .sam file
 	echo "rm ${dir2}/${samout}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -817,7 +817,9 @@ do
 	
 	# Job specific commands
 	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T BaseRecalibrator -R ${fasta_refgenome} -I ${dir2}/${dupout} -knownSites ${dbSNP} -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o ${dir2}/${recal_data} -L ${regions} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T PrintReads -R ${fasta_refgenome} -I ${dir2}/${dupout} -BQSR ${dir2}/${recal_data} -o ${dir2}/${recal} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	#echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T PrintReads -R ${fasta_refgenome} -I ${dir2}/${dupout} -BQSR ${dir2}/${recal_data} -o ${dir2}/${recal} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+	## Dirty fix for Java fatal error while using PrintReads, max memory set to 16g https://gatkforums.broadinstitute.org/gatk/discussion/10353/gatk-3-8-0-printreads-fatal-error
+	echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "16" ]; then echo "16"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T PrintReads -R ${fasta_refgenome} -I ${dir2}/${dupout} -BQSR ${dir2}/${recal_data} -o ${dir2}/${recal} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# Cleaning commands
 	# remove deduplicated files
@@ -1292,6 +1294,10 @@ then
 fi
 
 # Cleaning commands
+# Remove error files upon successful completion. Comment to disable.
+echo "rm ${dir2}/*.err" >> ${dir2}/${samplename}_${job}.sbatch
+# Remove logs folder upon successfull completion. Comment to disable.
+echo "rm -rf ${dir2}/logs" >> ${dir2}/${samplename}_${job}.sbatch
 # Remove Temporary directory
 echo "rm -rf ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 # remove .sbatch
