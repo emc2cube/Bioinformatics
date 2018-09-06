@@ -10,7 +10,8 @@
 # a reference genome using either STAR (recommended), hishat2
 # or tophat2.
 # Differential expression will then be computed using
-# cufflinks or DESeq2.
+# cufflinks. If STAR is used then RSEM will also be used to
+# generate additional files for DESeq2.
 #
 ##############################################################
 ##                  Configurable variables                  ##
@@ -434,7 +435,6 @@ do
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 		
 		# Queue job
 		SBtrim=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -594,17 +594,16 @@ do
 		fi
 		
 		# Job specific commands
-		echo "fastqc -o ${dir2}/ --noextract ${dir2}/${trimout1} ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
+		echo "fastqc -o ${dir2}/ --noextract ${trimout1} ${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 		
 		# Cleaning commands
 		# remove trim.fastq files from destination folder
 		if [[ ${trim} == "1" ]]
 		then
-			echo "rm ${dir2}/${trimout1} ${dir2}/${trimout2}" >> ${dir2}/${samplename}_${job}.sbatch
+			echo "rm ${trimout1} ${trimout2}" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 		
 		# Queue job
 		SBfqc=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -662,7 +661,6 @@ do
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 
 		# Queue job
 		SBrsem=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -723,7 +721,6 @@ do
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 
 		# Queue job
 		SBcufflinks=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -845,7 +842,6 @@ then
 	# Cleaning commands
 	# remove .sbatch
 	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# Queue job
 	SBmatrix=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1008,7 +1004,6 @@ RALLDELIM
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 	
 		# Queue job
 		SBdeseq2=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1209,7 +1204,6 @@ RDELIM
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 	
 		# Queue job
 		SBdeseq2=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1279,7 +1273,6 @@ then
 	echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
 	# remove .sbatch
 	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 	
 	# Queue job
 	SBcuffmerge=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1343,7 +1336,6 @@ then
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 	
 		# Queue job
 		SBcuffquant=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1408,7 +1400,6 @@ then
 	echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
 	# remove .sbatch
 	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 	
 	# Queue job
 	SBcuffdiff=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1462,7 +1453,6 @@ then
 	echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
 	# remove .sbatch
 	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 	
 	# Queue job
 	SBcuffnorm=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
@@ -1545,7 +1535,6 @@ echo "rm -rf ${dir2}/logs" >> ${dir2}/${samplename}_${job}.sbatch
 echo "rm -rf ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 # remove .sbatch
 echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
 
 # Queue job
 SBnotif=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
