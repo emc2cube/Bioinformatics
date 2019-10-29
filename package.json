@@ -1,0 +1,23 @@
+{
+  "name": "emc2cube-bioinformatics",
+  "version": "1.0.0",
+  "description": "High throughput sequencing scripts: bowtie2, GATK, etc...",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emc2cube/Bioinformatics.git"
+  },
+  "keywords": [
+    "NGS",
+    "SLURM",
+    "pipeline",
+    "WES",
+    "RNAseq",
+    "CRISPR"
+  ],
+  "author": "Julien Couthouis",
+  "license": "EUPL-1.2+",
+  "bugs": {
+    "url": "https://github.com/emc2cube/Bioinformatics/issues"
+  },
+  "homepage": "https://github.com/emc2cube/Bioinformatics#readme"
+}
