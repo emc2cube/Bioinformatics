@@ -1,18 +1,23 @@
 {
   "name": "emc2cube-bioinformatics",
-  "version": "1.0.0",
-  "description": "High throughput sequencing scripts: bowtie2, GATK, etc...",
+  "version": "2.0.0",
+  "description": "Set of high throughput sequencing analysis scripts to quickly generate and queue jobs on SLURM-based HPC clusters",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/emc2cube/Bioinformatics.git"
   },
   "keywords": [
     "NGS",
+    "Next Generation Sequencing",
     "SLURM",
+    "HPC",
     "pipeline",
     "WES",
+    "Whole Exome Sequencing",
     "RNAseq",
-    "CRISPR"
+    "RNA Sequencing",
+    "CRISPR",
+    "CRISPR screens"
   ],
   "author": "Julien Couthouis",
   "license": "EUPL-1.2+",

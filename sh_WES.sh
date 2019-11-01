@@ -8,9 +8,13 @@
 #
 # This script will process fastq(.gz) files and align them to
 # a reference genome using bowtie2. It will then use Picard
-# and GATK following GATK according to June 2016 best
-# practices workflow.
-# SNPs will then be annotated with ANNOVAR.
+# and GATK following the June 2016 best practices workflow.
+# SNPs will then be annotated using ANNOVAR.
+#
+## Options:
+#
+# --help : Display help message.
+# --version : Display version number.
 #
 ##############################################################
 ##                  Configurable variables                  ##
@@ -20,7 +24,7 @@
 #
 # Maximum number of threads (or CPUs) to request and allocate to programs.
 # In some case less than this value may automatically be allowed.
-threads=`nproc --all --ignore=1`
+threads=$(nproc --all --ignore=1)
 #
 # Maximum amount of memory (in GB) to request and allocate to programs.
 # In some case less than this value may automatically be allowed.
@@ -99,16 +103,16 @@ mapq="10"
 ## GATK options
 #
 # Picard-tools picard.jar location
-picard="/media/Userland/Applications/picard.jar"
+picard="/Tools/Applications/picard.jar"
 #
 # GATK GenomeAnalysisTK.jar file location
-gatk="/media/Userland/Applications/GenomeAnalysisTK.jar"
+gatk="/Tools/Applications/GenomeAnalysisTK.jar"
 #
 # Reference genome (fasta) file.
 # It must be the same one that was indexed by bowtie2 for alignment
-fasta_refgenome="/media/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
+fasta_refgenome="/Tools/RefGenomes/gatk_2.3_ucsc_hg19/ucsc.hg19.fasta"
 #
-# List of the targeted intervals we wanted to sequence. 
+# List of the targeted intervals we wanted to sequence.
 # This is necessary as only about 60-70% of all the reads will end up in exonic regions and the rest may align anywhere else in the genome.
 # To restrict the output to exonic sequences, generate a file containing for example all the exons plus 50bp at each end for getting splice site information as well.
 # This can be done using the UCSC Table Browser (http://genome.ucsc.edu/cgi-bin/hgTables?command=start).
@@ -185,19 +189,46 @@ iftttevent="SNPCalling"
 #
 ## Setup done. You should not need to edit below this point ##
 
+# Help!
+if [ "${1}" == "--help" ] || [ "${2}" == "--help" ] || [ "${3}" == "--help" ]
+then
+	echo "Usage: $(basename $0) </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]"
+	echo ""
+	echo "Description"
+	echo ""
+	echo "This script will process fastq(.gz) files and align them to"
+	echo "a reference genome using bowtie2. It will then use Picard"
+	echo "and GATK following the June 2016 best practices workflow."
+	echo "SNPs will then be annotated using ANNOVAR."
+	echo ""
+	echo "Options:"
+	echo "$(basename $0) --help : Display this help message."
+	echo "$(basename $0) --version : Display version number."
+	echo ""
+	exit
+fi
+
+# Version
+if [ "${1}" == "--version" ] || [ "${2}" == "--version" ] || [ "${3}" == "--version" ]
+then
+	echo "$(basename $0) version 2.0"
+	echo ".g.vcf support"
+	exit
+fi
+
 # Get fastq directory
-dir="$1"
+dir="${1}"
 
 # Get destination directory
-dir2="$2"
+dir2="${2}"
 
 # Get config file location
-config="$3"
+config="${3}"
 
 # Check paths and trailing / in directories
 if [ -z "${dir}" -o -z "${dir2}" ]
 then
-	echo "Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]"
+	$(echo "${0} --help")
 	exit
 fi
 
@@ -218,7 +249,8 @@ then
 		source "${config}"
 	else
 		echo "Invalid config file detected. Is it an .ini file?"
-		echo "Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]"
+		echo ""
+		$(echo "${0} --help")
 		exit
 	fi
 fi
@@ -239,8 +271,8 @@ then
 fi
 
 # Test if sequence files are .fastq or .fastq.gz
-fastqgz=`ls ${dir}/ | grep .fastq.gz`
-fastq=`ls ${dir}/ --hide=*.gz | grep .fastq`
+fastqgz=$(ls ${dir}/ | grep .fastq.gz)
+fastq=$(ls ${dir}/ --hide=*.gz | grep .fastq)
 if [ -z "${fastqgz}" ] && [ -z "${fastq}" ]
 then
 	echo ""
@@ -353,18 +385,17 @@ fi
 # Concatenate files if split
 if [ ${merge} -eq "1" ]
 then
-
 	echo ""
 	echo "-- Merging files --"
 	echo ""
 	mkdir -p ${dir}/FastQbackup/
-	filestomergeR1=`ls ${dir}/ | grep _L[0-9][0-9][0-9]_R1_[0-9][0-9][0-9]`
-	filestomergeR2=`ls ${dir}/ | grep _L[0-9][0-9][0-9]_R2_[0-9][0-9][0-9]`
+	filestomergeR1=$(ls ${dir}/ | grep _L[0-9][0-9][0-9]_R1)
+	filestomergeR2=$(ls ${dir}/ | grep _L[0-9][0-9][0-9]_R2)
 	echo "Processing R1 files"
 	echo ""
 	for i in ${filestomergeR1}
 	do
-		sampleoutput=`echo ${i} | sed 's/_L[0-9][0-9][0-9]_R1_[0-9][0-9][0-9]/_R1/g'`
+		sampleoutput=$(echo ${i} | sed 's/_L[0-9][0-9][0-9]_R1/_R1/g')
 		echo "Processing ${i}"
 		cat ${dir}/${i} >> ${dir}/${sampleoutput}
 		mv ${dir}/${i} ${dir}/FastQbackup/
@@ -374,7 +405,7 @@ then
 	echo ""
 	for i in ${filestomergeR2}
 	do
-		sampleoutput=`echo ${i} | sed 's/_L[0-9][0-9][0-9]_R2_[0-9][0-9][0-9]/_R2/g'`
+		sampleoutput=$(echo ${i} | sed 's/_L[0-9][0-9][0-9]_R2/_R2/g')
 		echo "Processing ${i}"
 		cat ${dir}/${i} >> ${dir}/${sampleoutput}
 		mv ${dir}/${i} ${dir}/FastQbackup/
@@ -424,15 +455,15 @@ while read line;
 do
 
 	# General variables
-	read1=`echo ${line} | cut -d" " -f1`
-	read2=`echo ${line} | cut -d" " -f2`
-	samplename=`echo ${read1} | awk -F_R1 '{print $1}'`
+	read1=$(echo ${line} | cut -d" " -f1)
+	read2=$(echo ${line} | cut -d" " -f2)
+	samplename=$(echo ${read1} | awk -F_R1 '{print $1}')
 
 	echo "Processing" ${samplename}
-	
 
 
-	###################### 
+
+	######################
 	## Prepare and queue trimming job
 	job="trim"
 
@@ -447,10 +478,9 @@ do
 		unpaired1="/dev/null"  # Unpaired reads are discarded
 		unpaired2="/dev/null"  # Unpaired reads are discarded
 	fi
-	
+
 	if [ ! -z ${trim} ] && [ ${trim} -eq "1" ]
 	then
-		
 		# General SLURM parameters
 		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
@@ -475,7 +505,7 @@ do
 		then
 			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
-		
+
 		# Job specific commands
 		# Trim fastq files with trimmomatic
 		echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar PE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${dir}/${read2} ${trimout1} ${unpaired1} ${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
@@ -483,7 +513,7 @@ do
 		# Cleaning commands
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		
+
 		# Queue job
 		SBtrim=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
 		echo -e "\t Trimming job queued"
@@ -492,31 +522,31 @@ do
 		trimout1="${dir}/${read1}"
 		trimout2="${dir}/${read2}"
 	fi
-	
-	
+
+
 
 	######################
 	## Prepare and queue alignment job
 	job="align"
-	
+
 	# bowtie2 variables
-	samout=`basename ${read1} | sed "s/_R1${fileext}/.sam/g"`
-	bamout=`basename ${read1} | sed "s/_R1${fileext}/.bam/g"`
-	bamsortedout=`basename ${read1} | sed "s/_R1${fileext}/.sorted.bam/g"`
+	samout=$(basename ${read1} | sed "s/_R1${fileext}/.sam/g")
+	bamout=$(basename ${read1} | sed "s/_R1${fileext}/.bam/g")
+	bamsortedout=$(basename ${read1} | sed "s/_R1${fileext}/.sorted.bam/g")
 	if [ -z $LB ]
 	then
-		LB=`basename ${dir2}`
+		LB=$(basename ${dir2})
 	fi
-	SM=`echo ${read1} | awk -F_ '{print $1}'`
+	SM=$(echo ${read1} | awk -F_ '{print $1}')
 	if [ "${fileext}" = ".fastq.gz" ]
 	then
-		CN=`gzip -cd ${dir}/${read1} | head -n 1 | awk -F: '{print $1}' | sed 's/@//'`
-		PU=`gzip -cd ${dir}/${read1} | head -n 1 | awk -F: '{print $3}'`
+		CN=$(gzip -cd ${dir}/${read1} | head -n 1 | awk -F: '{print $1}' | sed 's/@//')
+		PU=$(gzip -cd ${dir}/${read1} | head -n 1 | awk -F: '{print $3}')
 	else
-		CN=`head -n 1 ${dir}/${read1} | awk -F: '{print $1}' | sed 's/@//'`
-		PU=`head -n 1 ${dir}/${read1} | awk -F: '{print $3}'`
+		CN=$(head -n 1 ${dir}/${read1} | awk -F: '{print $1}' | sed 's/@//')
+		PU=$(head -n 1 ${dir}/${read1} | awk -F: '{print $3}')
 	fi
-	
+
 	# General SLURM parameters
 	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
 	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
@@ -538,20 +568,20 @@ do
 	then
 		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Require previous job successful completion
 	if [ -n "${SBtrim}" ]
 	then
 		echo "#SBATCH --dependency=afterok:${SBtrim##* }" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# General commands
 	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 	if [ -n "${customcmd}" ]
 	then
 		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Job specific commands
 	# Perform alignment with bowtie
 	echo "bowtie2 -p ${threads} --phred33 --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${bt_refgenome} -S ${dir2}/${samout} -1 ${trimout1} -2 ${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
@@ -581,12 +611,12 @@ do
 
 
 
-	###################### 
+	######################
 	## Run fastqc to generate quality control files
 	if [ ! -z ${fastqc} ] && [ ${fastqc} -eq "1" ]
-	then	
+	then
 		job="fqc"
-	
+
 		# General SLURM parameters
 		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
@@ -608,7 +638,7 @@ do
 		# Require previous job successful completion
 		if [ -n "${SBtrim}" ]
 		then
-				echo "#SBATCH --dependency=afterok:${SBalign##* }" >> ${dir2}/${samplename}_${job}.sbatch
+			echo "#SBATCH --dependency=afterok:${SBalign##* }" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
 
 		# General commands
@@ -617,10 +647,10 @@ do
 		then
 			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
-		
+
 		# Job specific commands
 		echo "fastqc -o ${dir2}/ --noextract ${dir2}/${trimout1} ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		
+
 		# Cleaning commands
 		# remove trim.fastq files from destination folder
 		if [ ! -z ${trim} ] && [ ${trim} -eq "1" ]
@@ -629,7 +659,7 @@ do
 		fi
 		# remove .sbatch
 		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		
+
 		# Queue job
 		SBfqc=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
 		echo -e "\t FastQC job queued"
@@ -669,17 +699,17 @@ do
 	then
 		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Require previous job successful completion
 	echo "#SBATCH --dependency=afterok:${SBalign##* }" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 	# General commands
 	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 	if [ -n "${customcmd}" ]
 	then
 		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Job specific commands
 	# Use picard tools MarkDuplicates with removal of duplicates and index creation options.
 	echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "64" ]; then echo "64"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${picard} MarkDuplicates I=${dir2}/${bamsortedout} O=${dir2}/${dupout} METRICS_FILE=${dir2}/${logs}/${dupmetrics} REMOVE_DUPLICATES=true VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true SORTING_COLLECTION_SIZE_RATIO=0.20 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
@@ -698,9 +728,9 @@ do
 
 
 	## Start GATK best practice (June 2016) sample processing
-	
-	
-	
+
+
+
 	######################
 	## Local realignment around indels
 	# Note that indel realignment is no longer necessary for variant discovery if you plan to use a variant
@@ -738,17 +768,17 @@ do
 		then
 			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
-	
+
 		# Require previous job successful completion
 		echo "#SBATCH --dependency=afterok:${SBdup##* }" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 		# General commands
 		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 		if [ -n "${customcmd}" ]
 		then
 			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
-	
+
 		# Job specific commands
 		# Determining (small) suspicious intervals which are likely in need of realignment (technically not required on GATK > 3.6)
 		echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T RealignerTargetCreator -R ${fasta_refgenome} -I ${dir2}/${dupout} -o ${dir2}/${intervals} -known ${millsgold} -known ${onekGph1} -L ${regions} -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
@@ -768,7 +798,7 @@ do
 		# Queue job
 		SBrealign=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
 		echo -e "\t Realignment job queued"
-	
+
 		# Update variable names for next step
 		dupout="${matefixed}"
 		SBdup="${SBrealign}"
@@ -781,7 +811,7 @@ do
 	# GATK variables
 	recal_data="${samplename}.recal.grp"
 	recal="`basename ${dupout} .bam`.recal.bam"
-	recalbai="`basename ${recal} .bam`.bai"	
+	recalbai="`basename ${recal} .bam`.bai"
 
 	# General SLURM parameters
 	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
@@ -804,17 +834,17 @@ do
 	then
 		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Require previous job successful completion
 	echo "#SBATCH --dependency=afterok:${SBdup##* }" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 	# General commands
 	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 	if [ -n "${customcmd}" ]
 	then
 		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Job specific commands
 	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T BaseRecalibrator -R ${fasta_refgenome} -I ${dir2}/${dupout} -knownSites ${dbSNP} -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov ContextCovariate -o ${dir2}/${recal_data} -L ${regions} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 	#echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T PrintReads -R ${fasta_refgenome} -I ${dir2}/${dupout} -BQSR ${dir2}/${recal_data} -o ${dir2}/${recal} -nct ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
@@ -864,10 +894,10 @@ do
 	then
 		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Require previous job successful completion
 	echo "#SBATCH --dependency=afterok:${SBrecal##* }" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 	# General commands
 	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 	if [ -n "${customcmd}" ]
@@ -921,10 +951,10 @@ do
 		then
 			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 		fi
-	
+
 		# Require previous job successful completion
 		echo "#SBATCH --dependency=afterok:${SBrecal##* }" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 		# General commands
 		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
 		if [ -n "${customcmd}" ]
@@ -952,7 +982,7 @@ do
 		SBcoverageIDs=${SBcoverageIDs}:${SBcoverage##* }
 		echo -e "\t Coverage job queued"
 	fi
-	
+
 done < ${dir2}/Fastqs
 
 
@@ -966,8 +996,8 @@ echo ""
 echo "-- All sample jobs queued! --"
 echo ""
 
-	
-	
+
+
 ######################
 ## GVCFs ready notification
 if [ ${gvcf} -eq "1" ]
@@ -981,8 +1011,8 @@ then
 	echo "#SBATCH --time=2:00" >> ${dir2}/${samplename}_${job}.sbatch
 	if [ -n "${SLURMemail}" ]
 	then
-	echo "#SBATCH --mail-type=END --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi	
+		echo "#SBATCH --mail-type=END --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
+	fi
 	if [ -n "${SLURMaccount}" ]
 	then
 		echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -995,9 +1025,9 @@ then
 	then
 		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 	fi
-	
+
 	# Require previous job successful completion
-	echo "#SBATCH --dependency=afterok${SBsnpscallIDs}`if [ -n \"${SBcoverageIDs}\" ]; then echo \"${SBcoverageIDs}\"; fi`" >> ${dir2}/${samplename}_${job}.sbatch	  
+	echo "#SBATCH --dependency=afterok${SBsnpscallIDs}`if [ -n \"${SBcoverageIDs}\" ]; then echo \"${SBcoverageIDs}\"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
 
 	# General commands
 	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -1025,7 +1055,7 @@ then
 	[ -f ${dir2}/files1 ] && rm ${dir2}/files1
 	[ -f ${dir2}/files2 ] && rm ${dir2}/files2
 	[ -f ${dir2}/Fastqs ] && rm ${dir2}/Fastqs
-	
+
 	# That's all folks!
 	exit
 fi
@@ -1036,13 +1066,13 @@ fi
 if [ -n "${popfolder}" ]
 then
 	job="popvcf"
-	
+
 	if [ ${popfolder: -1} == "/" ]
 	then
 		popfolder=${popfolder%?}
 	fi
-	 	
-	allgvcf=`find ${popfolder} -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'`
+
+	allgvcf=$(find ${popfolder} -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g')
 
 	# General SLURM parameters
 	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
@@ -1076,7 +1106,7 @@ then
 	# Job specific commands
 	# Produce raw SNP calls from all .g.vcf files
 	echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T GenotypeGVCFs -R ${fasta_refgenome} -D ${dbSNP} -V `find ${popfolder} -name '*.g.vcf' | sed ':a;N;$!ba;s/\n/ -V /g'` -o ${popfolder}/aggregate.vcf -nt ${threads} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 	# Cleaning commands
 	# remove .sbatch
 	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
@@ -1085,7 +1115,7 @@ then
 	SBpopvcf=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
 	echo "-- Creation of .vcf file for VQSR agreggation using samples in ${popfolder}/ job queued --"
 
-	# Update variable names for next step   
+	# Update variable names for next step
 	popgvcf="${popfolder}/aggregate.vcf"
 fi
 
@@ -1095,11 +1125,11 @@ fi
 job="jointgeno"
 
 # GATK variables
-rawgvcfs=`echo ${rawgvcfs} | sed 's/ / -V /g'`
+rawgvcfs=$(echo ${rawgvcfs} | sed 's/ / -V /g')
 rawSNP="${LB}-JointGenotypeOutput.vcf"
 recalSNP="${LB}-JointGenotypeOutput.recalibratedsnps.vcf"
 filteredSNP="${LB}-JointGenotypeOutput.filtered.vcf"
-	
+
 # General SLURM parameters
 echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
 echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
@@ -1144,7 +1174,7 @@ echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T ApplyRecalibratio
 echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T VariantRecalibrator -R ${fasta_refgenome} -input ${dir2}/${recalSNP} `if [ -n "${popgvcf}" ]; then echo "-aggregate ${popgvcf}"; fi` --maxGaussians 4 -resource:mills,known=false,training=true,truth=true,prior=12.0 ${millsgold} -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 ${dbSNP} -an QD -an DP -an FS -an SOR -an ReadPosRankSum -an MQRankSum -an InbreedingCoeff -mode INDEL -tranche 100.0 -tranche 99.9 -tranche 99.5 -tranche 99.0 -tranche 90.0 -recalFile ${dir2}/recalibrate_INDEL.recal -tranchesFile ${dir2}/recalibrate_INDEL.tranches -rscriptFile ${dir2}/recalibrate_INDEL_plots.R -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
 # Pass #4 for Indels ApplyRecalibration
 echo "java -Xmx${mem}g -Djava.io.tmpdir=${tmp} -jar ${gatk} -T ApplyRecalibration -R ${fasta_refgenome} -input ${dir2}/${recalSNP} -tranchesFile ${dir2}/recalibrate_INDEL.tranches -recalFile ${dir2}/recalibrate_INDEL.recal -o ${dir2}/$filteredSNP --ts_filter_level 99.0 -mode INDEL -nt ${threads} `if [ -n "${ped}" ]; then echo "-ped ${ped} -pedValidationType SILENT"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	
+
 # Cleaning commands
 # Remove indermediate files
 echo "rm ${dir2}/${recalSNP}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -1246,8 +1276,8 @@ echo "#SBATCH `if [ ! -z ${threads} ] && [ ${threads} -gt "1" ]; then echo "--cp
 echo "#SBATCH --time=10:00" >> ${dir2}/${samplename}_${job}.sbatch
 if [ -n "${SLURMemail}" ]
 then
-echo "#SBATCH --mail-type=FAIL,END --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-fi	
+	echo "#SBATCH --mail-type=FAIL,END --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
+fi
 if [ -n "${SLURMaccount}" ]
 then
 	echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
@@ -1260,7 +1290,7 @@ if [ -n "${SLURMqos}" ]
 then
 	echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
 fi
-	
+
 # Require previous job successful completion
 echo "#SBATCH --dependency=afterok:${SBannovar##* }`if [ -n \"${SBcoverageIDs}\" ]; then echo \"${SBcoverageIDs}\"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
 
@@ -1290,7 +1320,7 @@ echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results.tar.gz Results_`basena
 if [ -n "${iftttkey}" ] && [ -n "${iftttevent}" ]
 then
 	# Trigger IFTTT maker channel event when it's ready, nice isn't it?
-	echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"`basename ${dir2}`\" }' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}" >> ${dir2}/${samplename}_${job}.sbatch
+	echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"`basename ${dir2}`\" , \"value2\" : \"`whoami`\"}' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}" >> ${dir2}/${samplename}_${job}.sbatch
 fi
 
 # Cleaning commands

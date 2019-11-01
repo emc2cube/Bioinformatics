@@ -1,103 +1,168 @@
-Bioinformatics
-==============
+# Bioinformatics pipelines, [SLURM](https://slurm.schedmd.com/overview.html) friendly
 
-High throughput sequencing scripts: bowtie2, GATK, etc...
+![GitHub package.json version](https://img.shields.io/github/package-json/v/emc2cube/Bioinformatics)
+![GitHub top language](https://img.shields.io/github/languages/top/emc2cube/Bioinformatics?color=green)
+![GitHub](https://img.shields.io/github/license/emc2cube/Bioinformatics?color=yellow)
+[![Runs on Sherlock](https://img.shields.io/badge/Runs_on-Sherlock-red)](https://www.sherlock.stanford.edu)
+
+> Set of high throughput sequencing analysis scripts to quickly generate and queue jobs on [SLURM](https://slurm.schedmd.com/overview.html)-based HPC clusters, such as [Stanford's Sherlock](https://www.sherlock.stanford.edu)🕵🏻‍♂️️
+>
+> Most scripts include some sort of failsafe: if a job fails it will be requeued once. This is useful in case of unexpected node failure.
+>
+> Currently available pipelines:
+> * Whole Exome Sequencing
+> * RNA Sequencing
+> * CRISPR screens
 
 
-Workflow scripts:
------------------
-
-
-## sh_WES.sh (SLURM compatible)
-
-Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
-
-# Description
+## sh_WES.sh
 
 This script will process fastq(.gz) files and align them to a reference genome using bowtie2.
-It will then use Picard and GATK following GATK according to June 2016 best practices workflow.
-SNPs will then be annotated with ANNOVAR.
-Include a failsafe, if a job fails, it will be requeued once in case of a hardware failure.
+It will then use Picard and GATK following the June 2016 best practices workflow.
+SNPs will then be annotated using ANNOVAR.
 
-# Options
+See the [WES.ini](https://github.com/emc2cube/Bioinformatics/blob/master/config_WES.ini) configuration file for all available options and settings.
 
-Can call trimmomatic, FastQC and compute coverage.
-Settings can be modified by using a customized config_WES.ini file.
+Options:
+* --help : Display help message.
+* --version : Display version number.
 
-## sh_RNAseq.sh (SLURM compatible)
+### Usage
 
-Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+```sh
+sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+```
 
-# Description
+
+## sh_RNAseq.sh
 
 This script will process fastq(.gz) files and align them to a reference genome using either STAR (recommended), hishat2 or tophat2.
-Differential expression will then be computed using cufflinks.
-If STAR is used then RSEM will also be used to generate gene read counts, pairwise comparison matrices will be created and DESeq2 analysis will be performed.
-Include a failsafe, if a job fails, it will be requeued once in case of a hardware failure.
+If STAR is used then RSEM will also be used and differential expression will be analyzed using DESeq2.
+Differential expression can also be computed using cufflinks (cufflinks is pretty much deprecated, should be avoided unless trying to reproduce old results).
 
-# Options
+See the [RNAseq.ini](https://github.com/emc2cube/Bioinformatics/blob/master/config_RNAseq.ini) configuration file for all available options and settings.
 
-Can call trimmomatic and FastQC.
-Settings can be modified by using a customized config_RNAseq.ini file.
+Options:
+* --help : Display help message.
+* --version : Display version number.
 
-## sh_bowtie2_AlignAll.sh (deprecated)
+### Usage
 
-Usage: sh_bowtie2_AlignAll.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> [/path/to/config/file.ini]
-
-# Description
-
-This script will convert fastq files to bowtie2 aligned .bam files.
-Optional: Can call a trimming program (trimmomatic, Trim Galore or your own script).
-This script will, for all samples in input folder:
-- convert .fastq or .fastq.gz files to .sam.
-- align .sam to reference genome.
-- convert .sam to .bam.
-- Sort and index .bam file.
-
-## sh_gatkSNPcalling.sh (deprecated)
-
-Usage: sh_gatkSNPcalling.sh </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
-
-# Description
-
-This script will process aligned .bam files.
-Optional: Will first remove duplicate reads.
-This script will, for all samples:
-- perform a local realignment around known indels.
-- perform a quality score recalibration.
-- generate .g.vcf file using HaplotypeCaller.
-- Optional: stop here
-- perform joint genotyping
-- Filter variants using VQSR.
-- annotate using annovar.
-- do some cleaning on .csv for an easy downloadable file.
-- Optional: Can trigger an IFTTT event using the maker channel.
+```sh
+sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+```
 
 
-## sh_FastQToSNPsCall.sh (deprecated)
+## sh_CRISPR.sh
 
-Usage: sh_FastQToSNPsCall.sh </path/to/fastq(.gz)/folder> </path/to/Aligned(.bam)/destination/folder> </path/to/SNPsCalled/folder> [/path/to/config/file.ini]
+This script will process the fastq(.gz) files generated in a typical CRISPR screen using either [casTLE](https://bitbucket.org/dmorgens/castle/) or [MAGeCK](https://sourceforge.net/projects/mageck/).
+* If using casTLE, a reference file of all the indices will be automatically created using bowtie (NOT bowtie2). It will then analyze the screen and generate basic graphs.
+* If using MAGeCK counts, tests, mle and pathway analysis will be performed. It will also run the [R](https://www.r-project.org) package "[MAGeCKFlute](https://bioconductor.org/packages/release/bioc/html/MAGeCKFlute.html)" and in all cases generate basic graphs.
 
-# Description
+See the [CRISPR.ini](https://github.com/emc2cube/Bioinformatics/blob/master/config_CRISPR.ini) configuration file for all available options and settings.
 
-Will call sh_bowtie2_AlignAll.sh to convert fastq to aligned .bam and then launch sh_gatkSNPcalling.sh to call SNPs with GATK and annotate them with ANNOVAR.
+Options:
+* --help : Display help message.
+* --version : Display version number.
+
+Dependancies:
+[csvkit](https://csvkit.readthedocs.io/en/latest/) should be installed on your system in a location included in your $PATH.
 
 
-Utilities scripts:
-------------------
+### Usage
+
+```sh
+sh_CRISPR.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+```
+
+### Python 3.6 compatibility
+
+For easy integration along MAGeCK, or any other modern tools, a python 3.6+ compatible version of casTLE is included.
+This is based on [casTLE commit 981d6d8](https://bitbucket.org/dmorgens/castle/commits/981d6d877c0fe3ee233e9fd977b13800987a032c) and may not be up to date.
+You still need to download the whole [casTLE repository](https://bitbucket.org/dmorgens/castle/) even if you end up switching the scripts with their python 3.6+ compatible version.
 
 
 ## sh_md5alldir.sh
 
-Usage: sh_md5alldir.sh </path/to/dir/> [-options, -? or --help for help]
+This script will process all sub-directories of the input folders and for each of them will create a <directory_name>.md5 file if it does not exist yet, or check <directory> files against the existing <directory_name>.md5 file.
 
-# Description
+Options:
+* -f or --force : even if there is already a <directory>.md5 file, it will be replaced by a new <directory>.md5 file.
+* --help : Display help message.
+* --version : Display version number.
 
-This script will process all sub-directories of the input folders and for each of them
-will create a <directory_name>.md5 file if it does not exist yet, or check <directory> files
-against the existing <directory_name>.md5 file.
+### Usage
 
-# Options:
+```sh
+sh_md5alldir.sh </path/to/dir/> [OPTIONS]
+```
 
--f or --force : even if a <directory>.md5 file is detected, will replace it by a fresh one
-and will not check files against it.
+
+## sh_sha1alldir.sh
+
+This script will process all sub-directories of the input folders and for each of them will create a <directory_name>.sha1 file if it does not exist yet, or check <directory> files against the existing <directory_name>.sha1 file.
+
+Options:
+* -f or --force : even if there is already a <directory>.sha1 file, it will be replaced by a new <directory>.sha1 file.
+* --help : Display help message.
+* --version : Display version number.
+
+### Usage
+
+```sh
+sh_sha1alldir.sh </path/to/dir/> [OPTIONS]
+```
+
+
+## sh_ACMGfilter.sh
+
+This script will look for an annovar .snps.exome_summary.csv file and generate a list of all SNPs found in the ACMG guidelines in a new ACMG_genes.csv file.
+This file can be directly sent to a clinician for incidental findings reports, if required.
+
+Options:
+* --help : Display help message.
+* --version : Display version number.
+
+### Usage
+
+```sh
+sh_ACMGfilter.sh </path/to/.csv/containing/folder> [/path/to/destination/folder]
+```
+
+
+## sh_mergeFastQ.sh
+
+Simple script to consolidate fragmented .fastq files from different sequencing lanes.
+Original files will be backed up in a FastQbackup folder.
+
+Options:
+* --help : Display help message.
+* --version : Display version number.
+
+### Usage
+
+```sh
+sh_mergeFastQ.sh </path/to/fastq(.gz)/folder>
+```
+
+
+## Author(s) contributions
+
+👤 **Julien Couthouis**
+
+*Initial work and releases*
+
+* Linkedin: [@jcouthouis](https://www.linkedin.com/in/jcouthouis/)
+* Github: [@emc2cube](https://github.com/emc2cube)
+
+
+## Show your support
+
+Give a ![GitHub stars](https://img.shields.io/github/stars/emc2cube/Bioinformatics?style=social) if this project helped you!
+
+
+## License
+
+Copyright © 2019 [Julien Couthouis](https://github.com/emc2cube).
+
+This project is [EUPL-1.2](https://github.com/emc2cube/Bioinformatics/blob/master/LICENSE) licensed.
