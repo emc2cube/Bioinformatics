@@ -1310,11 +1310,13 @@ then
 
 	# Job specific commands
 	# mageck mle tends to freeze randomly a lot. So here we launch it as a background process and then monitor the log file every minute.
-	# Job will be automatically rescheduled if no changes have been made to the log file for the last 20 minutes, as it probably just hang up for no good reason again...
-	echo "mageck mle --count-table ${dir2}/MAGeCK/results/count/all.count.txt `if [ ! -z ${matrixfile} ]; then echo \"-d ${matrixfile}\"; else echo \"--day0-label ${day0}\";fi` --output-prefix ${dir2}/MAGeCK/results/test/mle`if [ ! -z ${mageckcontrolsgrna} ]; then echo \" --control-sgrna ${mageckcontrolsgrna}\"; fi` --threads ${threads} || if [ -f ${dir2}/MAGeCK/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/MAGeCK/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/MAGeCK/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi &" >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
+	# Job will be automatically rescheduled if no changes have been made to the log file for the last hour, as it probably just hang up for no good reason again...
+	# Update - It seems leaving --genes-varmodeling undefined and using the default value (which is either 0, 1000, 2000 or all depending where you look in the code) is the cause of the crash.
+	# --genes-varmodeling is now manually set to 0, as done by Snakemake in mageck_vispr. Still leaving the log check in place, tuned up to 1h for now just in case, may need to be adjusted on other clusters.
+	echo "mageck mle --genes-varmodeling 0 --count-table ${dir2}/MAGeCK/results/count/all.count.txt `if [ ! -z ${matrixfile} ]; then echo \"-d ${matrixfile}\"; else echo \"--day0-label ${day0}\";fi` --output-prefix ${dir2}/MAGeCK/results/test/mle`if [ ! -z ${mageckcontrolsgrna} ]; then echo \" --control-sgrna ${mageckcontrolsgrna}\"; fi` --threads ${threads} || if [ -f ${dir2}/MAGeCK/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/MAGeCK/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/MAGeCK/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi &" >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
 	echo 'while ps -p ${!} >/dev/null' >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
 	echo 'do' >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
-	echo "	checkmlealive=\`find ${dir2}/MAGeCK/${logs}/${samplename}_${job}.err -cmin -20\`" >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
+	echo "	checkmlealive=\`find ${dir2}/MAGeCK/${logs}/${samplename}_${job}.err -cmin -60\`" >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
 	echo '	sleep 5s' >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
 	echo '	if [ -z ${checkmlealive} ]' >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch
 	echo '	then' >> ${dir2}/MAGeCK/${samplename}_${job}.sbatch

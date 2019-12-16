@@ -67,7 +67,7 @@ Options:
 
 Dependancies:
 [csvkit](https://csvkit.readthedocs.io/en/latest/) should be installed on your system in a location included in your $PATH.
-
+[pathos](https://pypi.org/project/pathos/) should be installed on your system, this will provide [ppft](https://pypi.org/project/ppft/), a fork of [Parallel Python](https://www.parallelpython.com) working with both python2.7 and python3.6.
 
 ### Usage
 
@@ -80,6 +80,7 @@ sh_CRISPR.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/t
 For easy integration along MAGeCK, or any other modern tools, a python 3.6+ compatible version of casTLE is included.
 This is based on [casTLE commit 981d6d8](https://bitbucket.org/dmorgens/castle/commits/981d6d877c0fe3ee233e9fd977b13800987a032c) and may not be up to date.
 You still need to download the whole [casTLE repository](https://bitbucket.org/dmorgens/castle/) even if you end up switching the scripts with their python 3.6+ compatible version.
+If you previously used casTLE with python 2.7 and already have [Parallel Python](https://www.parallelpython.com) installed you will need to uninstall it before installing [pathos](https://pypi.org/project/pathos/)
 
 
 ## sh_md5alldir.sh
