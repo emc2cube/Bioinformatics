@@ -1,6 +1,6 @@
 {
   "name": "emc2cube-bioinformatics",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Set of high throughput sequencing analysis scripts to quickly generate and queue jobs on SLURM-based HPC clusters",
   "repository": {
     "type": "git",
@@ -19,7 +19,16 @@
     "CRISPR",
     "CRISPR screens"
   ],
-  "author": "Julien Couthouis",
+  "author": {
+    "name": "Julien Couthouis",
+    "url": "https://www.linkedin.com/in/jcouthouis/"
+  },
+  "contributors": [
+    {
+      "name": "Rosa Ma",
+      "url": "https://www.linkedin.com/in/rosaxma/"
+    }
+  ],
   "license": "EUPL-1.2+",
   "bugs": {
     "url": "https://github.com/emc2cube/Bioinformatics/issues"

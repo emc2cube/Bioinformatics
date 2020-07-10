@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
+# Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini] [OutputDirName]
 #
 ##############################################################
 ##                       Description                        ##
@@ -10,10 +10,16 @@
 # a reference genome using either STAR (recommended), hishat2
 # or tophat2.
 # If STAR is used then RSEM will also be used and differential
-# expression will be analyzed using DESeq2.
+# expression will be analysed using DESeq2.
 # Differential expression can also be computed using cufflinks
 # (cufflinks is pretty much deprecated, should be avoided
 # unless trying to reproduce old results).
+# Local Splicing Variation can now be computed using MAJIQ
+# and/or LeafCutter.
+# If a 4th '[OutputDirName]' argument is provided only the
+# secondary analyses selected in the config file will be queued
+# using the already aligned and processed files from a previous
+# run, and results will be saved in a '_OutputDirName' directory.
 #
 ## Options:
 #
@@ -24,7 +30,8 @@
 ##                  Configurable variables                  ##
 ##############################################################
 #
-## Hardware options
+#
+## General options
 #
 # Maximum number of threads (or CPUs) to request and allocate to programs.
 # In some case less than this value may automatically be allowed.
@@ -32,14 +39,21 @@ threads=$(nproc --all --ignore=1)
 #
 # Maximum amount of memory (in GB) to request and allocate to programs.
 # In some case less than this value may automatically be allowed.
-mem="24"
+mem="128"
 #
 # Log folder, will be created in your destination folder.
 logs="logs"
 #
 # Advanced: Path to temporary folder. Useful if your cluster system have a fast local I/O disk.
 # Leave empty to use the destination folder. In all cases temporary files will be purged at the end of the script.
-tmp=""
+tmp="\${L_SCRATCH_JOB}"
+#
+# Debug mode.
+# For troubleshooting only. Will keep all intermediate files,
+# sbatch files and logs.
+# 0 = No ; 1 = Yes
+debug="0"
+#
 #
 ## SLURM options
 #
@@ -53,9 +67,10 @@ SLURMpartition=""
 SLURMqos=""
 #
 # Custom commands to run before any other program.
-# Use it to load modules for example
+# Use it to load modules for example:
 # customcmd="module load R"
 customcmd=""
+#
 #
 ## FastQ options
 #
@@ -63,27 +78,27 @@ customcmd=""
 # 0 = No ; 1 = Yes
 merge="0"
 #
-# Process undetermined/unmatched files (tag not properly recognized)
+# Process undetermined/unmatched files (tag not properly recognized).
 # 0 = No ; 1 = Yes
 underdet="0"
 #
-# Process BLANK files (Sample name should be "BLANK")
+# Process BLANK files (Sample name should be "BLANK").
 # 0 = No ; 1 = Yes
 blank="0"
 #
-# Perform fastqc on fastq files?
-# (If sequences are trimmed, fastqc will be performed on trimmed sequences)
+# Perform fastqc on fastq files.
+# If sequences are trimmed, fastqc will be performed on trimmed sequences.
 # 0 = No ; 1 = Yes
 fastqc="0"
 #
-# Trim sequences with Trimmomatic?
+# Trim sequences with Trimmomatic.
 # 0 = No ; 1 = Yes
 trim="0"
 #
-# Trimmomatic location
-Trimmomatic="/bin/Trimmomatic/"
+# Trimmomatic folder, should contain a trimmomatic.jar file
+Trimmomatic="/Tools/Trimmomatic"
 #
-# Keep unpaired trimmed sequences?
+# Keep unpaired trimmed sequences.
 # 0 = No ; 1 = Yes
 unpaired="0"
 #
@@ -91,58 +106,120 @@ unpaired="0"
 ## Alignment options
 #
 # Select which software to use for alignment jobs.
-# This should be installed in your $PATH and corresponding indexes need to be created
+# This should be installed in your $PATH and corresponding indexes need to be created.
 # Valid values: star, hisat2, tophat2
 align="star"
 #
-# tophat2 (bowtie2) indexed reference genome location
+# tophat2 (bowtie2) indexed reference genome location.
 th_refgenome="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Sequence/Bowtie2Index/genome"
 #
-# hisat2 indexed reference genome location
+# hisat2 indexed reference genome location.
 ha_refgenome="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Sequence/Hisat2Index/genome"
 #
-# STAR indexed reference genome location
+# STAR indexed reference genome location.
 st_refgenome="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Sequence/StarIndex/"
 #
-# RSEM indexed reference genome location
+# RSEM indexed reference genome location.
 rs_refgenome="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Sequence/RsemIndex/genome"
 #
 # Annotation files folder.
-# It must be compatible with the indexed bowtie2 file used for alignment
-# or used while creating the hishat2 / STAR indexes.
-# This folder should contain at least a gene.gtf file.
-# If bowtie2 is used it should also contains the known.gff, known.fa, etc, files
+# It must be compatible with the indexed reference genome used for alignment.
+# This folder may contain your gtf / gff3 files.
+# If tophat2 is used it should contains the known.gff, known.fa, etc…, files
 # else they will be generated during the first run.
-gtf="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Annotation/Genes"
+annotations="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Annotation/Genes"
+#
+# GTF formated annotation file.
+# By default looks for genes.gtf located in the ${annotation} folder.
+gtf="${annotations}/genes.gtf"
 #
 # Reference genome (fasta) file.
-# It must be the same one that was indexed by bowtie2 for alignment
+# It must be compatible with your indexed genomes, and annotation files.
 fasta_refgenome="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa"
 #
-# Read group parameters
+# Read group parameters.
 # Library: if empty LB will be set to the destination folder name.
 LB=""
 #
-# Platform used to produce the reads. Valid values: CAPILLARY, LS454, ILLUMINA, SOLID, HELICOS, IONTORRENT and PACBIO.
+# Platform used to produce the reads.
+# Valid values: CAPILLARY, LS454, ILLUMINA, SOLID, HELICOS, IONTORRENT and PACBIO.
 PL="ILLUMINA"
 #
 #
 ## Differential Expression options
 #
-# Select which software to use for differential expression jobs.
+# Select which software to use for differential expression jobs. Leave empty if not needed.
 # Corresponding software or modules should be installed in your $PATH
 # Valid values: deseq2, cufflinks, both
 diffexp="deseq2"
 #
-# Separe replicate samples by a comma and groups by a space. Sample name is case sensitive.
+# Delimit replicate samples by a COMMA and groups by a SPACE. Sample name is case sensitive.
 # example:
 # groupedsamples="1d-Control-Rep1,1d-Control-Rep2,1d-Control-Rep3 5d-Control-Rep1,5d-Control-Rep2,5d-Control-Rep3 1d-Experiment-Rep1,1d-Experiment-Rep2,1d-Experiment-Rep3 5d-Experiment-Rep1,5d-Experiment-Rep2,5d-Experiment-Rep3"
 groupedsamples=""
 #
-# Separe group labels by a comma. Groups should be named in the same order than the samples
+# Delimit group labels by a COMMA. Groups should be named in the same order than the samples.
 # example:
 # labels="1d-Control,5d-Control,1d-Experiment,5d-Experiment"
 labels=""
+#
+#
+## Local Splicing Variation options
+#
+# Select which software to use for LSV jobs. Leave empty if not needed.
+# Corresponding software or modules should be installed in your $PATH
+# or location configured properly below.
+# Valid values: majiq, leafcutter, both
+splicing="majiq"
+#
+# MAJIQ options
+#
+# Length of the RNA-seq reads. Not needed since MAJIQ 2.2, uncomment in the code if using an older MAJIQ version.
+# MAJIQ can handle experiments with multiple read lengths, just indicate the longest read length.
+# Leave empty for it to be automatically detected, can be overwritten here if needed.
+# example:
+# readlength="250"
+#readlength=""
+#
+# Preparation strandness.
+# Some of the RNASeq preparations are strand specific.
+# This preparations can be reverse strand specific [reverse],
+# forward strand specific [forward], or non-strand specific [none].
+# This parameter is optional, in which case [none] is used as default.
+# Valid values: forward, reverse, none
+strandness="none"
+#
+# Transcriptome file with the annotation database to be used with MAJIQ.
+# It must be compatible with the indexed reference genome used for alignment.
+# Currently, only accepts GFF3 format. By default looks for genes.gff3 located in the ${annotation} folder.
+gff3="${annotations}/genes.gff3"
+#
+# Genome assembly.
+# Name of the genome assembly used. Can also be determined automatically from your directory structure (see examples).
+# examples:
+# genomebuild="hg19"
+# genomebuild=$(echo ${gff3} | sed 's/\/Annotation.*//g' | awk -F/ '{print $NF}')
+genomebuild=$(echo ${gff3} | sed 's/\/Annotation.*//g' | awk -F/ '{print $NF}')
+#
+# Perform PSI quantification.
+# 0 = No ; 1 = Yes
+psi="0"
+#
+# LeafCutter options
+#
+# LeafCutter folder, should contain the scripts, clustering and leafviz folders.
+leafCutterDir="/Tools/leafcutter"
+#
+# Optional exon_file location.
+# For more details see http://davidaknowles.github.io/leafcutter/articles/Usage.html
+exonfile="${annotations}/leafcutter_exons.txt.gz"
+#
+# Annotation code for Leafcutter Shiny App.
+# path to annotation files and <annotation_code> used in step 0 of
+# http://davidaknowles.github.io/leafcutter/articles/Visualization.html
+# From Step 1 concrete example section this would be:
+# anncode="../leafviz/annotation_codes/gencode_hg19/gencode_hg19"
+anncode="${annotations}/leafcutter"
 #
 #
 ## IFTTT options
@@ -150,11 +227,11 @@ labels=""
 # Trigger IFTTT when script is done.
 # You must register the "Maker channel" on https://ifttt.com/maker
 # Copy your private key here. Leave blank to disable this function.
-# iftttkey="AbCd_15CdhUIvbsFJTHGMcfgjsdHRTgcyjt" # Not a real key, you have to use your own private key
+# iftttkey="AbCd_15CdhUIvbsFJTHGMcfgjsdHRTgcyjt" # Not a real key, you have to use your own private key.
 iftttkey=""
 #
 # Event name used in your IFTTT recipes.
-# The maker channel will look for the combination private key + event name to then trigger your recipe
+# The maker channel will look for the combination private key + event name to then trigger your recipe.
 # You can create a recipe to send an email, a text message or a push notification.
 iftttevent="RNAseq"
 #
@@ -162,9 +239,9 @@ iftttevent="RNAseq"
 ## Setup done. You should not need to edit below this point ##
 
 # Help!
-if [ "${1}" == "--help" ] || [ "${2}" == "--help" ] || [ "${3}" == "--help" ]
+if [ "${1}" = "--help" ] || [ "${2}" = "--help" ] || [ "${3}" = "--help" ] || [ "${4}" = "--help" ]
 then
-	echo "Usage: $(basename $0) </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]"
+	echo "Usage: $(basename "${0}") </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini] [OutputDirName]"
 	echo ""
 	echo "Description"
 	echo ""
@@ -172,61 +249,68 @@ then
 	echo "a reference genome using either STAR (recommended), hishat2"
 	echo "or tophat2."
 	echo "If STAR is used then RSEM will also be used and differential"
-	echo "expression will be analyzed using DESeq2."
-	echo "Differential expression can also be computed using cufflinks"
-	echo "(cufflinks is pretty much deprecated, should be avoided"
+	echo "expression will be analysed using DESeq2."
+	echo "Differential expression can also be computed using Cufflinks"
+	echo "(Cufflinks is pretty much deprecated, should be avoided"
 	echo "unless trying to reproduce old results)"
+	echo "If a 4th '[OutputDirName]' argument is provided"
+	echo "only the secondary analyses selected in the config file will be queued"
+	echo "using the already aligned and processed files from a previous run, "
+	echo "and results will be saved in a '_OutputDirName' directory."
 	echo ""
 	echo "Options:"
-	echo "$(basename $0) --help : Display this help message."
-	echo "$(basename $0) --version : Display version number."
+	echo "$(basename "${0}") --help : Display this help message."
+	echo "$(basename "${0}") --version : Display version number."
 	echo ""
 	exit
 fi
 
 # Version
-if [ "${1}" == "--version" ] || [ "${2}" == "--version" ] || [ "${3}" == "--version" ]
+if [ "${1}" = "--version" ] || [ "${2}" = "--version" ] || [ "${3}" = "--version" ] || [ "${4}" = "--version" ]
 then
-	echo "$(basename $0) version 2.0"
-	echo "DESeq2 and Single-Read support"
+	echo "$(basename "${0}") version 2.1"
+	echo "Alternative splicing support (2.1)"
+	echo "Major code cleaning (2.1)"
+	echo "DESeq2 and Single-Read support (2.0)"
 	exit
 fi
 
 # Get fastq directory
-dir="$1"
+dir="${1}"
 
 # Get destination directory
-dir2="$2"
+dir2="${2}"
 
 # Get config file location
-config="$3"
+config="${3}"
 
 # Check paths and trailing / in directories
-if [ -z "${dir}" -o -z "${dir2}" ]
+if [ -z "${dir}" ] || [ -z "${dir2}" ]
 then
-	$(echo "${0} --help")
+	${0} --help
 	exit
 fi
 
-if [ ${dir: -1} == "/" ]
+if [ "${dir: -1}" = "/" ]
 then
 	dir=${dir%?}
 fi
 
-if [ ${dir2: -1} == "/" ]
+if [ "${dir2: -1}" = "/" ]
 then
 	dir2=${dir2%?}
 fi
 
-if [ -n "$config" ]
+if [ -n "${config}" ]
 then
-	if [ ${config: -4} == ".ini" ]
+	if [ "${config: -4}" = ".ini" ]
 	then
-		source "$config"
+		# shellcheck disable=SC1090
+		source "${config}"
 	else
 		echo "Invalid config file detected. Is it an .ini file?"
 		echo ""
-		$(echo "${0} --help")
+		${0} --help
 		exit
 	fi
 fi
@@ -237,10 +321,15 @@ then
 	exit
 fi
 
+if [ -n "${4}" ]
+then
+	reanalysis="_${4}"
+fi
+
 
 # Test if sequence files are .fastq or .fastq.gz
-fastqgz=$(ls ${dir}/ | grep .fastq.gz)
-fastq=$(ls ${dir}/ --hide=*.gz | grep .fastq)
+fastqgz=$(find -L "${dir}" -maxdepth 1 -name '*.fastq.gz')
+fastq=$(find -L "${dir}" -maxdepth 1 -name '*.fastq')
 if [ -z "${fastqgz}" ] && [ -z "${fastq}" ]
 then
 	echo ""
@@ -252,7 +341,7 @@ then
 	echo ""
 	echo "Both .fastq and .fastq.gz files are present in ${dir}/"
 	echo "Existing .fastq.gz files will now be converted to .fastq files"
-	gunzip ${dir}/*.fastq
+	gunzip "${dir}/*.fastq.gz"
 	fileext=".fastq"
 fi
 if [ -n "${fastqgz}" ] && [ -z "${fastq}" ]
@@ -279,671 +368,809 @@ echo "Final results will be located in ${dir2}/"
 echo "Log files will be created in ${dir2}/${logs}"
 
 echo ""
-echo "-- Alignment options"
+echo "-- Alignment options --"
 echo ""
-
-if [ align="star" ]
+if [ "${align}" = "star" ]
 then
 	echo "Using ${st_refgenome} as reference genome"
-elif [ align="hisat2" ]
+elif [ "${align}" = "hisat2" ]
 then
 	echo "Using ${ha_refgenome} as reference genome"
-elif [ align="tophat2" ]
+elif [ "${align}" = "tophat2" ]
 then
 	echo "Using ${th_refgenome} as reference genome"
 fi
-
-if [ ${underdet} -eq "0" ]
+if [ "${underdet}" = "0" ]
 then
 	echo "Undetermined files will not be processed"
 fi
-if [ ${blank} -eq "1" ]
+if [ "${blank}" = "1" ]
 then
 	echo "\"BLANK\" files will be processed"
 fi
-if [ ${merge} -eq "1" ]
+if [ "${merge}" = "1" ]
 then
 	echo "Individual files will also be merged into a big \"MERGED\" file"
 fi
-if [ ${trim} -eq "1" ]
+if [ "${trim}" = "1" ]
 then
 	echo "Sequence will be trimmed"
 	echo "Trimmomatic is installed in ${Trimmomatic}"
 fi
 
+if [ -n "${diffexp}" ]
+then
+	echo ""
+	echo "-- Differential Expression options --"
+	echo ""
+	echo "Differential expression will be analysed using $(if [ "${diffexp}" = "deseq2" ] || [ "${diffexp}" = "both" ]; then echo "DESeq2"; fi)$(if [ "${diffexp}" = "both" ]; then echo " and "; fi)$(if [ "${diffexp}" = "cufflinks" ] || [ "${diffexp}" = "both" ]; then echo "Cufflinks"; fi)."
+	if [ "${diffexp}" = "cufflinks" ] || [ "${diffexp}" = "both" ]
+	then
+		echo "WARNING - The use of Cufflinks for RNAseq analysis is pretty much deprecated, should be avoided - WARNING"
+	fi
+fi
+
+if [ -n "${splicing}" ]
+then
+	echo ""
+	echo "-- Local Splicing Variation options --"
+	echo ""
+	echo "Local Splicing Variants will be analysed using $(if [ "${splicing}" = "majiq" ] || [ "${splicing}" = "both" ]; then echo "MAJIQ"; fi)$(if [ "${splicing}" = "both" ]; then echo " and "; fi)$(if [ "${splicing}" = "leafcutter" ] || [ "${splicing}" = "both" ]; then echo "LeafCutter"; fi)."
+fi
+
 echo ""
-echo "-- Hardware"
+echo "-- Hardware --"
 echo ""
 echo "Up to ${threads} CPUs will be used"
 echo "Up to ${mem}GB of memory will be allocated to the programs"
 
-# Initialize
-mkdir -p ${dir2}/
-[ -f ${dir2}/files1 ] && rm ${dir2}/files1
-[ -f ${dir2}/files2 ] && rm ${dir2}/files2
-[ -f ${dir2}/Fastqs ] && rm ${dir2}/Fastqs
-[ -f ${dir2}/matrices ] && rm ${dir2}/matrices
-[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt
-[ -d ${dir2}/logs ] && rm -rf ${dir2}/logs
-mkdir -p ${dir2}/${logs}
+echo ""
+echo "---------------"
 
-if [ -z ${tmp} ]
+# Initialize
+mkdir -p "${dir2}/"
+[ -f "${dir2}/files1" ] && rm "${dir2}/files1"
+[ -f "${dir2}/files2" ] && rm "${dir2}/files2"
+[ -f "${dir2}/Fastqs" ] && rm "${dir2}/Fastqs"
+[ -f "${dir2}/matrices" ] && rm "${dir2}/matrices"
+[ -f "${dir2}/assembly_GTF_list.txt" ] && rm "${dir2}/assembly_GTF_list.txt"
+[ -d "${dir2}/logs" ] && rm -rf "${dir2}/logs"
+[ -f "${dir2}/juncfiles.txt" ] && rm "${dir2}/juncfiles.txt"
+mkdir -p "${dir2}/${logs}"
+
+if [ -z "${tmp}" ]
 then
 	tmp="${dir2}/tmp"
 fi
 
 # Concatenate files if split
-if [ ${merge} -eq "1" ]
+if [ "${merge}" = "1" ]
 then
-
 	echo ""
 	echo "-- Merging files --"
 	echo ""
-	mkdir -p ${dir}/FastQbackup/
-	filestomergeR1=$(ls ${dir}/ | grep _L[0-9][0-9][0-9]_R1)
-	filestomergeR2=$(ls ${dir}/ | grep _L[0-9][0-9][0-9]_R2)
+	mkdir -p "${dir}/FastQbackup/"
+	filestomergeR1=$(ls "${dir}"/*_L[0-9][0-9][0-9]_R1)
+	filestomergeR2=$(ls "${dir}"/*_L[0-9][0-9][0-9]_R2)
 	echo "Processing R1 files"
 	echo ""
 	for i in ${filestomergeR1}
 	do
-		sampleoutput=$(echo ${i} | sed 's/_L[0-9][0-9][0-9]_R1/_R1/g')
+		sampleoutput="${i//_L[0-9][0-9][0-9]_R1/_R1}"
 		echo "Processing ${i}"
-		cat ${dir}/${i} >> ${dir}/${sampleoutput}
-		mv ${dir}/${i} ${dir}/FastQbackup/
+		cat "${i}" >> "${sampleoutput}"
+		mv "${i}" "${dir}/FastQbackup/"
 	done
 	echo ""
 	echo "Processing R2 files"
 	echo ""
 	for i in ${filestomergeR2}
 	do
-		sampleoutput=$(echo ${i} | sed 's/_L[0-9][0-9][0-9]_R2/_R2/g')
+		sampleoutput="${i//_L[0-9][0-9][0-9]_R2/_R2}"
 		echo "Processing ${i}"
-		cat ${dir}/${i} >> ${dir}/${sampleoutput}
-		mv ${dir}/${i} ${dir}/FastQbackup/
+		cat "${i}" >> "${sampleoutput}"
+		mv "${i}" "${dir}/FastQbackup/"
 	done
 	echo ""
 	echo "-- Files merged --"
 fi
 
-if [ ${underdet} -eq "0" ]
+if [ "${underdet}" = "0" ]
 then
-	if [ ${blank} -eq "0" ]
+	if [ "${blank}" = "0" ]
 	then
 		# Remove all Undetermined_* and BLANK* files
-		ls ${dir}/ --hide=*ndetermined* --hide=*nmatched* --hide=BLANK* | grep _R1 > ${dir2}/files1
-		ls ${dir}/ --hide=*ndetermined* --hide=*nmatched* --hide=BLANK* | grep _R2 > ${dir2}/files2
-		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
+		find -L "${dir}" -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	else
 		# Remove all Undetermined_* files
-		ls ${dir}/ --hide=*ndetermined* --hide=*nmatched* | grep _R1 > ${dir2}/files1
-		ls ${dir}/ --hide=*ndetermined* --hide=*nmatched* | grep _R2 > ${dir2}/files2
-		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
+		find -L "${dir}" -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	fi
 else
-	if [ ${blank} -eq "0" ]
+	if [ "${blank}" = "0" ]
 	then
 		# Remove all BLANK* files
-		ls ${dir}/ --hide=BLANK* | grep _R1 > ${dir2}/files1
-		ls ${dir}/ --hide=BLANK* | grep _R2 > ${dir2}/files2
-		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
+		find -L "${dir}" -name '*_R1*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files1"
+		find -L "${dir}" -name '*_R2*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files2"
+		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	else
 		# Process all the files!
-		ls ${dir}/ | grep _R1 > ${dir2}/files1
-		ls ${dir}/ | grep _R2 > ${dir2}/files2
-		paste ${dir2}/files1 ${dir2}/files2 > ${dir2}/Fastqs
+		find -L "${dir}" -name '*_R1*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -name '*_R2*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	fi
 fi
+
+
 
 ######################
 ## Processing samples
 ######################
 
-echo ""
-echo "-- Queuing sample jobs --"
-echo ""
-
-while read line;
-do
-
-	# General variables
-	read1=$(echo ${line} | cut -d" " -f1)
-	read2=$(echo ${line} | cut -d" " -f2)
-	samplename=$(echo ${read1} | awk -F_R1 '{print $1}')
-	if [ ${read1} != ${read2} ]
-	then
-		pairedend="1"
-	fi
-
-	echo "Processing" ${samplename}
-
-
-
-	######################
-	## Prepare and queue trimming job
-	job="trim"
-
-	# Trimmomatic variables
-	trimout1="${dir2}/`basename ${read1} ${fileext}`.trim.fastq"
-	trimout2="${dir2}/`basename ${read2} ${fileext}`.trim.fastq"
-
-	if [ ! -z ${unpaired} ] && [ ${unpaired} -eq "1" ]
-	then
-		unpaired1="${dir2}/`basename ${read1} ${fileext}`.unpaired.fastq"  # Save unpaired reads
-		unpaired2="${dir2}/`basename ${read2} ${fileext}`.unpaired.fastq"  # Save unpaired reads
-	else
-		unpaired1="/dev/null"  # Unpaired reads are discarded
-		unpaired2="/dev/null"  # Unpaired reads are discarded
-	fi
-
-	if [ ! -z ${trim} ] && [ ${trim} -eq "1" ]
-	then
-
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi` `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "--cpus-per-task=2"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=2:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Job specific commands
-		# Trim fastq files with trimmomatic
-		if [ ! -z ${pairedend} ] && [ ${pairedend} -eq "1" ]
-		then
-			echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar PE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${dir}/${read2} ${trimout1} ${unpaired1} ${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		else
-			echo "java -Xmx`if [ ! -z ${mem} ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi`g -Djava.io.tmpdir=${tmp} -jar ${Trimmomatic}/trimmomatic.jar SE -threads `if [ ! -z ${threads} ] && [ ${threads} -gt "2" ]; then echo "2"; else echo "${threads}"; fi` -phred33 ${dir}/${read1} ${trimout1} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Cleaning commands
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# Queue job
-		SBtrim=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-		echo -e "\t Trimming job queued"
-	else
-		# Need to rename some variables
-		trimout1="${dir}/${read1}"
-		trimout2="${dir}/${read2}"
-	fi
-
-
-
-	######################
-	## Align reads with hisat2 / tophat2 / star
-	job="align"
-
-	# Variables
-	samout=$(basename ${read1} | sed "s/_R1${fileext}/.sam/g")
-	bamout=$(basename ${read1} | sed "s/_R1${fileext}/.bam/g")
-	bamsortedout=$(basename ${read1} | sed "s/_R1${fileext}/.sorted.bam/g")
-	if [ -z $LB ]
-	then
-		LB=$(basename ${dir2})
-	fi
-	SM=$(echo ${read1} | awk -F_ '{print $1}')
-	if [ "${fileext}" = ".fastq.gz" ]
-	then
-		CN=$(gzip -cd ${dir}/${read1} | head -n 1 | awk -F: '{print $1}' | sed 's/@//')
-		PU=$(gzip -cd ${dir}/${read1} | head -n 1 | awk -F: '{print $3}')
-	else
-		CN=$(head -n 1 ${dir}/${read1} | awk -F: '{print $1}' | sed 's/@//')
-		PU=$(head -n 1 ${dir}/${read1} | awk -F: '{print $3}')
-	fi
-
-	# General SLURM parameters
-	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --time=8:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${SLURMemail}" ]
-	then
-		echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMaccount}" ]
-	then
-		echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMpartition}" ]
-	then
-		echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMqos}" ]
-	then
-		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-
-	# Require previous job successful completion
-	if [ ! -z ${trim} ] && [ ${trim} -eq "1" ]
-	then
-		echo "#SBATCH --dependency=afterok:${SBtrim##* }" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-
-	# General commands
-	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${customcmd}" ]
-	then
-		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-
-	# Job specific commands
-	if [[ ${align} == "star" ]]
-	then
-		# star alignment job using ENCODE standard options as defined in STAR manual
-		echo "STAR --runMode alignReads --runThreadN ${threads} --limitBAMsortRAM ${mem}000000000 --outTmpDir ${tmp}/${samplename}_aRtmp --twopassMode Basic --genomeDir ${st_refgenome} --readFilesIn ${trimout1} `if [ ! -z ${pairedend} ] && [ ${pairedend} -eq "1" ]; then echo "${trimout2}"; fi` `if [ -n "${fastqgz}" ] && [ ${trim} -ne "1" ]; then echo "--readFilesCommand zcat"; fi` --outFilterType BySJout --outFilterMultimapNmax 20 --alignSJoverhangMin 8 --alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 --outFilterMismatchNoverReadLmax 0.04 --alignIntronMin 20 --alignIntronMax 1000000 --alignMatesGapMax 1000000 --quantMode TranscriptomeSAM GeneCounts --alignEndsType EndToEnd --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonical --outSAMtype BAM SortedByCoordinate --outFileNamePrefix ${dir2}/${samplename}. || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "mv ${dir2}/${samplename}.Aligned.sortedByCoord.out.bam ${dir2}/${bamsortedout}" >> ${dir2}/${samplename}_${job}.sbatch
-		#		echo "STAR --runMode inputAlignmentsFromBAM --runThreadN ${threads} --outTmpDir ${tmp}/${samplename}_iAFBtmp --inputBAMfile ${dir2}/${bamsortedout} --outWigType bedGraph --outWigStrand Stranded --outWigReferencesPrefix chr --outFileNamePrefix ${dir2}/${samplename}. || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		#		echo "STAR --runMode inputAlignmentsFromBAM --runThreadN ${threads} --outTmpDir ${tmp}/${samplename}_iAFBtmp --inputBAMfile ${dir2}/${bamsortedout} --outWigType wiggle --outWigStrand Stranded --outWigReferencesPrefix chr --outFileNamePrefix ${dir2}/${samplename}. || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	elif [[ ${align} == "hisat2" ]]
-	then
-		# hisat2 alignment job
-		echo "hisat2 -p ${threads} --phred33 --dta-cufflinks --no-softclip --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${ha_refgenome} -1 ${trimout1} `if [ ! -z ${pairedend} ] && [ ${pairedend} -eq "1" ]; then echo "-2 ${trimout2}"; fi` -S ${dir2}/${samout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	elif [[ ${align} == "tophat2" ]]
-	then
-		# tophat2 alignment job
-		echo "tophat2 -G ${gtf}/genes.gtf --transcriptome-index ${gtf}/known -p ${threads} -o ${dir2} ${th_refgenome} ${trimout1} `if [ ! -z ${pairedend} ] && [ ${pairedend} -eq "1" ]; then echo "${trimout2}"; fi` || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [[ ${align} = "hisat2" ]] || [[ ${align} = "tophat2" ]]
-	then
-		# Convert .sam to .bam
-		echo "samtools view -bS -o ${dir2}/${bamout} ${dir2}/${samout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		# Sort .bam file
-		echo "samtools sort -@ ${threads} -o ${dir2}/${bamsortedout} -O bam -T ${tmp} ${dir2}/${bamout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	# Index sorted .bam
-	echo "samtools index ${dir2}/${bamsortedout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-
-	# Cleaning commands
-	# remove trim.fastq files from destination folder
-	if [[ ${trim} == "1" ]] && [[ ${fastqc} == "0" ]]
-	then
-		echo "rm ${dir2}/${trimout1} ${dir2}/${trimout2}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	# remove .sam file
-	echo "rm ${dir2}/${samout}" >> ${dir2}/${samplename}_${job}.sbatch
-	# remove unsorted .bam file
-	echo "rm ${dir2}/${bamout}" >> ${dir2}/${samplename}_${job}.sbatch
-	# clean STAR intermediate files
-	echo "rm -rf ${dir2}/${samplename}.Log.progress.out ${dir2}/${samplename}._STARgenome ${dir2}/${samplename}._STARpass1" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "mv ${dir2}/${samplename}.Log.out ${dir2}/${logs}/${samplename}.star.log" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "mv ${dir2}/${samplename}.Log.final.out ${dir2}/${logs}/${samplename}.star.stats" >> ${dir2}/${samplename}_${job}.sbatch
-	# remove .sbatch
-	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
-
-	# Queue job
-	SBalign=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-	echo -e "\t Alignment job queued"
-
-
-
-	######################
-	## Run fastqc to generate quality control files
-	job="fqc"
-
-	if [[ ${fastqc} == "1" ]]
-	then
-
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "4" ]; then echo "--mem=4000"; else echo "--mem=${mem}000"; fi` `if [ ! -z ${threads} ] && [ ${threads} -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=1:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Require previous job successful completion
-		if [ -n "${SBtrim}" ]
-		then
-			echo "#SBATCH --dependency=afterok:${SBalign##* }" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Job specific commands
-		echo "fastqc -o ${dir2}/ --noextract ${trimout1} ${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# Cleaning commands
-		# remove trim.fastq files from destination folder
-		if [[ ${trim} == "1" ]]
-		then
-			echo "rm ${trimout1} ${trimout2}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# Queue job
-		SBfqc=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-		if [ -n "${SBfqc##* }" ]
-		then
-			SBfqcIDs=${SBfqcIDs}:${SBfqc##* }
-		fi
-		echo -e "\t FastQC job queued"
-	fi
-
-
-
-	######################
-	## Count reads
-	job="rsem"
-
-	if [[ ${align} == "star" && ( ${diffexp} == "deseq2" || ${diffexp} == "both" ) ]]
-	then
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=8:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMaccount}" ]
-		then
-			echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Require previous job successful completion
-		echo "#SBATCH --dependency=afterok:${SBalign##* }" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Job specific commands
-		echo "rsem-calculate-expression --seed-length 10 -p ${threads} --temporary-folder ${tmp}/${samplename} `if [ ! -z ${pairedend} ] && [ ${pairedend} -eq "1" ]; then echo "--paired-end"; fi` --bam --no-bam-output --calc-ci ${dir2}/${samplename}.Aligned.toTranscriptome.out.bam ${rs_refgenome} ${dir2}/${samplename}.rsem || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "mv ${dir2}/${samplename}.rsem.stat ${dir2}/${samplename}.rsem" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# Cleaning commands
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# Queue job
-		SBrsem=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-		SBrsemIDs=${SBrsemIDs}:${SBrsem##* }
-		echo -e "\t RSEM counting job queued"
-	fi
-
-
-
-	######################
-	## Assemble transcriptomes
-	job="cufflinks"
-
-	if [[ ${diffexp} == "cufflinks" ]] || [[ ${diffexp} == "both" ]]
-	then
-
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=8:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMaccount}" ]
-		then
-			echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Require previous job successful completion
-		echo "#SBATCH --dependency=afterok:${SBalign##* }" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-
-		# Job specific commands
-		# Create a sample specific folder, and as cufflinks do not allow to specify an output directory then cd to it.
-		echo "mkdir -p ${dir2}/${samplename}.cuff" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "cd ${dir2}/${samplename}.cuff" >> ${dir2}/${samplename}_${job}.sbatch
-		# Create cufflinks job
-		echo "cufflinks -u -p ${threads} -g ${gtf}/genes.gtf -b ${fasta_refgenome} ${dir2}/${bamsortedout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		# Generate a list of sample specific transcripts.gtf files to be merged
-		echo "${dir2}/${samplename}.cuff/transcripts.gtf" >> ${dir2}/assembly_GTF_list.txt
-
-		# Cleaning commands
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
-
-		# Queue job
-		SBcufflinks=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-		SBcufflinksIDs=${SBcufflinksIDs}:${SBcufflinks##* }
-		echo -e "\t Cufflinks job queued"
-	fi
-
-done < ${dir2}/Fastqs
-
-
-
-echo ""
-echo "-- All sample jobs queued! --"
-echo ""
-
-
-if [[ ${align} == "star" && ( ${diffexp} == "deseq2" || ${diffexp} == "both" ) ]]
+if [ -z "${reanalysis}" ]
 then
 
-	######################
-	## Generate data matrix
-	job="matrix"
-	# We are no longer processing sample files, but rsem files
-	samplename="rsem"
+	echo ""
+	echo "-- Queuing sample jobs"
 
+	while read -r line;
+	do
+		# General variables
+		read1=$(echo "${line}" | cut -f1)
+		read2=$(echo "${line}" | cut -f2)
+		samplename=$(echo "${read1}" | awk -F_R1 '{print $1}')
+		if [ "${read1}" != "${read2}" ]
+		then
+			pairedend="1"
+		fi
+
+		echo ""
+		echo -e "\t-- Processing" "${samplename}"
+		echo ""
+
+
+
+		######################
+		## Prepare and queue trimming job
+
+		job="trim"
+
+		# Variables
+		trimout1="${dir2}/$(basename "${read1}" ${fileext}).trim.fastq"
+		trimout2="${dir2}/$(basename "${read2}" ${fileext}).trim.fastq"
+
+		if [ -n "${unpaired}" ] && [ "${unpaired}" = "1" ]
+		then
+			unpaired1="${dir2}/$(basename "${read1}" ${fileext}).unpaired.fastq"  # Save unpaired reads
+			unpaired2="${dir2}/$(basename "${read2}" ${fileext}).unpaired.fastq"  # Save unpaired reads
+		else
+			unpaired1="/dev/null"  # Unpaired reads are discarded
+			unpaired2="/dev/null"  # Unpaired reads are discarded
+		fi
+
+		if [ -n "${trim}" ] && [ "${trim}" = "1" ]
+		then
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi) $(if [ -n "${threads}" ] && [ "${threads}" -gt "2" ]; then echo "--cpus-per-task=2"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --time=2:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				# Trim fastq files with trimmomatic
+				if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]
+				then
+					echo "java -Xmx$(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi)g -Djava.io.tmpdir=\"${tmp}\" -jar ${Trimmomatic}/trimmomatic.jar PE -threads $(if [ -n "${threads}" ] && [ "${threads}" -gt "2" ]; then echo "2"; else echo "${threads}"; fi) -phred33 ${dir}/${read1} ${dir}/${read2} ${trimout1} ${unpaired1} ${trimout2} ${unpaired2} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				else
+					echo "java -Xmx$(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "8"; else echo "${mem}"; fi)g -Djava.io.tmpdir=\"${tmp}\" -jar ${Trimmomatic}/trimmomatic.jar SE -threads $(if [ -n "${threads}" ] && [ "${threads}" -gt "2" ]; then echo "2"; else echo "${threads}"; fi) -phred33 ${dir}/${read1} ${trimout1} ILLUMINACLIP:${Trimmomatic}/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				fi
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBtrim=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			echo -e "\t Trimming job queued"
+		else
+			# Need to rename some variables
+			trimout1="${dir}/${read1}"
+			trimout2="${dir}/${read2}"
+		fi
+
+
+
+		######################
+		## Align reads with hisat2 / tophat2 / star
+
+		job="align"
+
+		# Variables
+		samout=$(basename "${read1}" | sed "s/_R1${fileext}/.sam/g")
+		bamout=$(basename "${read1}" | sed "s/_R1${fileext}/.bam/g")
+		bamsortedout=$(basename "${read1}" | sed "s/_R1${fileext}/.sorted.bam/g")
+		if [ -z "$LB" ]
+		then
+			LB=$(basename "${dir2}")
+		fi
+		SM=$(echo "${read1}" | awk -F_ '{print $1}')
+		if [ "${fileext}" = ".fastq.gz" ]
+		then
+			CN=$(gzip -cd "${dir}/${read1}" | head -n 1 | awk -F: '{print $1}' | sed 's/@//')
+			PU=$(gzip -cd "${dir}/${read1}" | head -n 1 | awk -F: '{print $3}')
+		else
+			CN=$(head -n 1 "${dir}/${read1}" | awk -F: '{print $1}' | sed 's/@//')
+			PU=$(head -n 1 "${dir}/${read1}" | awk -F: '{print $3}')
+		fi
+
+		{
+			# General SLURM parameters
+			echo '#!/bin/bash'
+			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --time=8:00:00"
+			if [ -n "${SLURMemail}" ]
+			then
+				echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+			fi
+			if [ -n "${SLURMaccount}" ]
+			then
+				echo "#SBATCH --account=${SLURMaccount}"
+			fi
+			if [ -n "${SLURMpartition}" ]
+			then
+				echo "#SBATCH --partition=${SLURMpartition}"
+			fi
+			if [ -n "${SLURMqos}" ]
+			then
+				echo "#SBATCH --qos=${SLURMqos}"
+			fi
+
+			# Require previous job successful completion
+			if [ -n "${trim}" ] && [ "${trim}" = "1" ]
+			then
+				echo "#SBATCH --dependency=afterok:${SBtrim##* }"
+			fi
+
+			# General commands
+			echo "mkdir -p \"${tmp}\""
+			if [ -n "${customcmd}" ]
+			then
+				echo "${customcmd}"
+			fi
+
+			# Job specific commands
+			if [ ${align} = "star" ]
+			then
+				# star alignment job using ENCODE standard options
+				echo "STAR --runMode alignReads --runThreadN ${threads} --limitBAMsortRAM ${mem}000000000 --outTmpDir \"${tmp}\"/${samplename}_aRtmp --twopassMode Basic --genomeDir ${st_refgenome} --readFilesIn ${trimout1} $(if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]; then echo "${trimout2}"; fi) $(if [ -n "${fastqgz}" ] && [ ${trim} -ne "1" ]; then echo "--readFilesCommand zcat"; fi) --outFilterType BySJout --outFilterMultimapNmax 20 --alignSJoverhangMin 8 --alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 --outFilterMismatchNoverReadLmax 0.04 --alignIntronMin 20 --alignIntronMax 1000000 --alignMatesGapMax 1000000 --quantMode TranscriptomeSAM GeneCounts --alignEndsType EndToEnd --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonical --outSAMtype BAM SortedByCoordinate --outFileNamePrefix ${dir2}/${samplename}. || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				echo "mv ${dir2}/${samplename}.Aligned.sortedByCoord.out.bam ${dir2}/${bamsortedout}"
+			elif [ ${align} = "hisat2" ]
+			then
+				# hisat2 alignment job
+				echo "hisat2 -p ${threads} --phred33 --dta-cufflinks --no-softclip --rg-id ${LB}_${SM} --rg CN:${CN} --rg LB:${LB} --rg PL:${PL} --rg PU:${PU} --rg SM:${SM} -x ${ha_refgenome} -1 ${trimout1} $(if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]; then echo "-2 ${trimout2}"; fi) -S ${dir2}/${samout} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+			elif [ ${align} = "tophat2" ]
+			then
+				# tophat2 alignment job
+				echo "tophat2 -G ${gtf} --transcriptome-index ${annotations}/known -p ${threads} -o ${dir2} ${th_refgenome} ${trimout1} $(if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]; then echo "${trimout2}"; fi) || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+			fi
+			if [ ${align} = "hisat2" ] || [ ${align} = "tophat2" ]
+			then
+				# Convert .sam to .bam
+				echo "samtools view -bS -o ${dir2}/${bamout} ${dir2}/${samout} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				# Sort .bam file
+				echo "samtools sort -@ ${threads} -o ${dir2}/${bamsortedout} -O bam -T \"${tmp}\" ${dir2}/${bamout} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+			fi
+			# Index sorted .bam
+			echo "samtools index ${dir2}/${bamsortedout} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+			# Cleaning commands
+			# Remove trim.fastq files from destination folder
+			if [ ${trim} = "1" ] && [ ${fastqc} = "0" ]
+			then
+				echo "rm ${trimout1} ${trimout2}"
+			fi
+			# Remove .sam file
+			echo "rm ${dir2}/${samout}"
+			# Remove unsorted .bam file
+			echo "rm ${dir2}/${bamout}"
+			# Clean STAR intermediate files
+			echo "rm -rf ${dir2}/${samplename}.Log.progress.out ${dir2}/${samplename}._STARgenome ${dir2}/${samplename}._STARpass1"
+			echo "mv ${dir2}/${samplename}.Log.out ${dir2}/${logs}/${samplename}.star.log"
+			echo "mv ${dir2}/${samplename}.Log.final.out ${dir2}/${logs}/${samplename}.star.stats"
+			# Remove .sbatch
+			echo "rm ${dir2}/${samplename}_${job}.sbatch"
+			echo "exit 0"
+
+		} > "${dir2}/${samplename}_${job}.sbatch"
+
+		# Queue job
+		SBalign=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+		SBalignIDs=${SBalignIDs}:${SBalign##* }
+		echo -e "\t Alignment job queued"
+
+
+
+		######################
+		## Run fastqc to generate quality control files
+
+		job="fqc"
+
+		if [ "${fastqc}" = "1" ]
+		then
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --time=1:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				if [ -n "${SBtrim}" ]
+				then
+					echo "#SBATCH --dependency=afterok:${SBalign##* }"
+				fi
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				echo "fastqc -o ${dir2}/ --noextract ${trimout1} ${trimout2} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					# Remove trim.fastq files from destination folder
+					if [ ${trim} = "1" ]
+					then
+						echo "rm ${trimout1} ${trimout2}"
+					fi
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBfqc=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			if [ -n "${SBfqc##* }" ]
+			then
+				SBfqcIDs=${SBfqcIDs}:${SBfqc##* }
+			fi
+			echo -e "\t FastQC job queued"
+		fi
+
+
+
+		######################
+		## Count reads
+
+		job="rsem_calcexp"
+
+		if [ "${align}" = "star" ] && { [ "${diffexp}" = "deseq2" ] || [ "${diffexp}" = "both" ]; }
+		then
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --time=8:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				echo "#SBATCH --dependency=afterok:${SBalign##* }"
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				echo "rsem-calculate-expression --seed-length 10 -p ${threads} --temporary-folder \"${tmp}\"/${samplename} $(if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]; then echo "--paired-end"; fi) --bam --no-bam-output --calc-ci ${dir2}/${samplename}.Aligned.toTranscriptome.out.bam ${rs_refgenome} ${dir2}/${samplename}.rsem || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				echo "mv ${dir2}/${samplename}.rsem.stat ${dir2}/${samplename}.rsem"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					echo "rm ${dir2}/${samplename}.Aligned.toTranscriptome.out.bam"
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBrsem=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBrsemIDs=${SBrsemIDs}:${SBrsem##* }
+			echo -e "\t RSEM counting job queued"
+		fi
+
+
+
+		######################
+		## Assemble transcriptomes
+
+		job="cufflinks"
+
+		if [ "${diffexp}" = "cufflinks" ] || [ "${diffexp}" = "both" ]
+		then
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --time=8:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				echo "#SBATCH --dependency=afterok:${SBalign##* }"
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				# Create a sample specific folder, and as cufflinks do not allow to specify an output directory then cd to it.
+				echo "mkdir -p ${dir2}/${samplename}.cuff"
+				echo "cd ${dir2}/${samplename}.cuff || exit"
+				# Create cufflinks job
+				echo "cufflinks -u -p ${threads} -g ${gtf} -b ${fasta_refgenome} ${dir2}/${bamsortedout} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBcufflinks=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBcufflinksIDs=${SBcufflinksIDs}:${SBcufflinks##* }
+			echo -e "\t Cufflinks job queued"
+		fi
+
+
+
+		######################
+		## LeafCutter convert bams to juncs
+
+		job="leafcutter"
+
+		if [ "${splicing}" = "leafcutter" ] || [ "${splicing}" = "both" ]
+		then
+
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --time=2:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				echo "#SBATCH --dependency=afterok:${SBalign##* }"
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				# adapted from https://github.com/davidaknowles/leafcutter/blob/master/scripts/bam2junc.sh
+				echo "samtools view ${dir2}/${samplename}.sorted.bam | ${leafCutterDir}/scripts/filter_cs.py | ${leafCutterDir}/scripts/sam2bed.pl --use-RNA-strand - ${dir2}/${samplename}.bed || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				echo "${leafCutterDir}/scripts/bed2junc.pl ${dir2}/${samplename}.bed ${dir2}/${samplename}.junc || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				echo "${dir2}/${samplename}.junc" >> "${dir2}/juncfiles.txt"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					echo "rm ${dir2}/${samplename}.bed"
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBleafjunc=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBleafjuncIDs=${SBleafjuncIDs}:${SBleafjunc##* }
+			echo -e "\t JUNC conversion job queued"
+		fi
+
+	done < "${dir2}/Fastqs"
+
+fi # End of initial run of sample specific jobs
+
+
+
+######################
+## Generate data matrix
+
+job="rsem"
+
+if [ "${align}" = "star" ] && { [ "${diffexp}" = "deseq2" ] || [ "${diffexp}" = "both" ]; }
+then
 
 	# Variables
-	declare -a labelsarray=(`echo ${labels} | sed 's/,/ /g'`)
-	declare -a samplesarray=(`echo ${groupedsamples}`)
+	# We are no longer processing sample files, but all the rsem files to generate the matrix
+	samplename="matrix"
+
+	# Variables
+	IFS="," read -r -a labelsarray <<< "${labels}"
+	IFS=" " read -r -a samplesarray <<< "${groupedsamples}"
 	declare -a replicatesarray
 
-	# General SLURM parameters
-	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH `if [ ! -z ${threads} ] && [ ${threads} -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --time=5:00" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${SLURMemail}" ]
-	then
-		echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMaccount}" ]
-	then
-		echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMpartition}" ]
-	then
-		echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMqos}" ]
-	then
-		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
+	{
+		# General SLURM parameters
+		echo '#!/bin/bash'
+		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+		echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+		echo "#SBATCH --time=15:00"
+		if [ -n "${SLURMemail}" ]
+		then
+			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+		fi
+		if [ -n "${SLURMaccount}" ]
+		then
+			echo "#SBATCH --account=${SLURMaccount}"
+		fi
+		if [ -n "${SLURMpartition}" ]
+		then
+			echo "#SBATCH --partition=${SLURMpartition}"
+		fi
+		if [ -n "${SLURMqos}" ]
+		then
+			echo "#SBATCH --qos=${SLURMqos}"
+		fi
 
-	# Require previous job successful completion
-	echo "#SBATCH --dependency=afterok${SBrsemIDs}" >> ${dir2}/${samplename}_${job}.sbatch
+		# Require previous job successful completion
+		if [ -z "${reanalysis}" ]
+		then
+			echo "#SBATCH --dependency=afterok${SBrsemIDs}"
+		fi
 
-	# General commands
-	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${customcmd}" ]
-	then
-		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
+		# General commands
+		echo "mkdir -p \"${tmp}\""
+		if [ -n "${customcmd}" ]
+		then
+			echo "${customcmd}"
+		fi
 
-	# Job specific commands
-	mkdir -p ${dir2}/DESeq2
+		# Job specific commands
+		mkdir -p "${dir2}"/DESeq2"${reanalysis}"
 
-	# Generate an array with sample replicate names
-	repN="0"
-	while [ ${repN} -lt ${#labelsarray[@]} ]
-	do
-		#	declare -a `echo ${labelsarray[${repN}]}`
-		replicatesarray[${repN}]=$(echo ${samplesarray[${repN}]} | sed 's/,/ /g')
-		repN=$(( $repN + 1 ))
-	done
-
-	# Generate pair-wise comparison matrices
-	condA="0"
-	condB="0"
-	while [ ${condA} -lt ${#labelsarray[@]} ]
-	do
-		condB=$((condA + 1))
-		while [ ${condB} -lt ${#labelsarray[@]} ]
+		# Generate an array with sample replicate names
+		repN="0"
+		while [ ${repN} -lt ${#labelsarray[@]} ]
 		do
-			echo "rsem-generate-data-matrix ${dir2}/`echo ${replicatesarray[${condA}]} ${replicatesarray[${condB}]} | sed \"s# #.rsem.genes.results ${dir2}/#g\"`.rsem.genes.results > ${dir2}/DESeq2/${labelsarray[${condA}]}"_vs_"${labelsarray[${condB}]}.genes.matrix || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-			echo ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix >> ${dir2}/matrices
-			echo '#!/usr/bin/env Rscript' > ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			chmod +x ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo '' >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo '# Variables' >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo "table <- \"${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo "cond1 <- \"${labelsarray[${condA}]}\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo "rep1 <- `wc -w <<< ${replicatesarray[${condA}]} | sed 's/ //g'`" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo "cond2 <- \"${labelsarray[${condB}]}\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo "rep2 <- `wc -w <<< ${replicatesarray[${condB}]} | sed 's/ //g'`" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			echo "output <- \"${dir2}/DESeq2/\"" >> ${dir2}/DESeq2/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R
-			condB=$((condB + 1))
+			replicatesarray[${repN}]="${samplesarray[${repN}]//,/ }"
+			repN=$((repN + 1))
 		done
-		condA=$((condA + 1))
-	done
 
-	# Generate comparison matrices with all samples, only if more than 2 conditions
-	if [ ${#labelsarray[@]} -gt 2 ]
-	then
-		condN="0"
-		echo "rsem-generate-data-matrix ${dir2}/`echo ${groupedsamples} | sed \"s# #.rsem.genes.results ${dir2}/#g;s#,#.rsem.genes.results ${dir2}/#g\"`.rsem.genes.results > ${dir2}/DESeq2/`basename ${dir2}`_all.genes.matrix || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		echo '#!/usr/bin/env Rscript' > ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-		chmod +x ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-		echo '# Variables' >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-		echo "table <- \"${dir2}/DESeq2/`basename ${dir2}`_all.genes.matrix\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-		while [ ${condN} -lt ${#labelsarray[@]} ]
+		# Generate pairwise comparison matrices
+		condA="0"
+		condB="0"
+		while [ ${condA} -lt ${#labelsarray[@]} ]
 		do
-			echo "cond$(( ${condN} + 1 )) <- \"${labelsarray[${condN}]}\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-			conditionsall="`if [ -n "${conditionsall}" ]; then echo "${conditionsall}, "; fi`rep(cond$(( ${condN} + 1 )), `wc -w <<< ${replicatesarray[${condN}]}`)"
-			condN=$(( ${condN} + 1 ))
-		done
-		echo "output <- \"${dir2}/DESeq2/`basename ${dir2}`_\"" >> ${dir2}/DESeq2/`basename ${dir2}`_all.DESeq2.R
-	fi
+			condB=$((condA + 1))
+			while [ ${condB} -lt ${#labelsarray[@]} ]
+			do
+				echo "rsem-generate-data-matrix ${dir2}/$(echo "${replicatesarray[${condA}]}" "${replicatesarray[${condB}]}" | sed "s# #.rsem.genes.results ${dir2}/#g").rsem.genes.results > ${dir2}/DESeq2${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				echo "${dir2}/DESeq2${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix" >> "${dir2}/matrices"
+				{
+					echo '#!/usr/bin/env Rscript'
+					echo ''
+					echo '# Variables'
+					echo "table <- \"${dir2}/DESeq2${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.genes.matrix\""
+					echo "cond1 <- \"${labelsarray[${condA}]}\""
+					echo "rep1 <- $(wc -w <<< "${replicatesarray[${condA}]}" | sed 's/ //g')			# Number of replicates for cond2, automatically determined"
+					echo "cond2 <- \"${labelsarray[${condB}]}\""
+					echo "rep2 <- $(wc -w <<< "${replicatesarray[${condB}]}" | sed 's/ //g')			# Number of replicates for cond2, automatically determined"
+					echo "output <- \"${dir2}/DESeq2${reanalysis}/\""
+					echo "siglfc <- 1			# |Log2| fold change to be used as significant. Set at 1 by default, meaning a 2 fold change (log2(2)=1)"
+					echo "sigpadj <- 0.05			# Adjusted p-value used as upper threshold for significance"
+				} > "${dir2}/DESeq2${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R"
+				chmod +x "${dir2}/DESeq2${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.DESeq2.R"
 
-	# Cleaning commands
-	# remove .sbatch
-	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+				condB=$((condB + 1))
+			done
+
+			condA=$((condA + 1))
+		done
+
+		# Generate comparison matrices with all samples, only if more than 2 conditions
+		if [ ${#labelsarray[@]} -gt 2 ]
+		then
+			condN="0"
+			echo "rsem-generate-data-matrix ${dir2}/$(echo "${groupedsamples}" | sed "s# #.rsem.genes.results ${dir2}/#g;s#,#.rsem.genes.results ${dir2}/#g").rsem.genes.results > ${dir2}/DESeq2${reanalysis}/$(basename "${dir2}")_all.genes.matrix || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+			{
+				echo '#!/usr/bin/env Rscript'
+				echo '# Variables'
+				echo "table <- \"${dir2}/DESeq2${reanalysis}/$(basename "${dir2}")_all.genes.matrix\""
+				while [ ${condN} -lt ${#labelsarray[@]} ]
+				do
+					echo "cond$((condN + 1)) <- \"${labelsarray[${condN}]}\""
+					conditionsall="$(if [ -n "${conditionsall}" ]; then echo "${conditionsall}, "; fi)rep(cond$((condN + 1)), $(wc -w <<< "${replicatesarray[${condN}]}"))"
+					condN=$((condN + 1))
+				done
+				echo "output <- \"${dir2}/DESeq2${reanalysis}/$(basename "${dir2}")_\""
+				echo "siglfc <- 1			# |Log2| fold change to be used as significant. Set at 1 by default, meaning a 2 fold change (log2(2)=1)"
+				echo "sigpadj <- 0.05		# Adjusted p-value used as upper threshold for significance"
+			} > "${dir2}/DESeq2${reanalysis}/$(basename "${dir2}")_all.DESeq2.R"
+			chmod +x "${dir2}/DESeq2${reanalysis}/$(basename "${dir2}")_all.DESeq2.R"
+		fi
+
+		# Cleaning commands
+		if [ "${debug}" != "1" ]
+		then
+			# Remove .sbatch
+			echo "rm ${dir2}/${samplename}_${job}.sbatch"
+		fi
+		echo "exit 0"
+
+	} > "${dir2}/${samplename}_${job}.sbatch"
 
 	# Queue job
-	SBmatrix=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-	echo -e "-- Matrix generation job queued --"
+	SBmatrix=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+	echo ""
+	echo "-- RSEM matrix generation job queued --"
+
 
 
 	######################
 	## DESeq2 analysis and basic plots
+
 	job="deseq2"
 
 	echo ""
-	echo "-- Queuing DESeq2 jobs --"
+	echo "-- DESeq2 --"
 	echo ""
 
 	# Create R script for all sample matrix, only if more than 2 conditions
 	if [ ${#labelsarray[@]} -gt 2 ]
 	then
 		# Variables
-		samplename="`basename ${dir2}`_all"
+		samplename="$(basename "${dir2}")_all"
 		Rscript=${samplename}.DESeq2.R
 
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "16" ]; then echo "--mem=16000"; else echo "--mem=${mem}000"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=10:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMaccount}" ]
-		then
-			echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
+		{
+			# General SLURM parameters
+			echo '#!/bin/bash'
+			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "16" ]; then echo "--mem=16000"; else echo "--mem=${mem}000"; fi)"
+			echo "#SBATCH --time=15:00"
+			if [ -n "${SLURMemail}" ]
+			then
+				echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+			fi
+			if [ -n "${SLURMaccount}" ]
+			then
+				echo "#SBATCH --account=${SLURMaccount}"
+			fi
+			if [ -n "${SLURMpartition}" ]
+			then
+				echo "#SBATCH --partition=${SLURMpartition}"
+			fi
+			if [ -n "${SLURMqos}" ]
+			then
+				echo "#SBATCH --qos=${SLURMqos}"
+			fi
 
-		# Require previous job successful completion
-		echo "#SBATCH --dependency=afterok:${SBmatrix##* }" >> ${dir2}/${samplename}_${job}.sbatch
+			# Require previous job successful completion
+			echo "#SBATCH --dependency=afterok:${SBmatrix##* }"
 
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
+			# General commands
+			echo "mkdir -p \"${tmp}\""
+			if [ -n "${customcmd}" ]
+			then
+				echo "${customcmd}"
+			fi
 
-		# Job specific commands
-		cat >> ${dir2}/DESeq2/${Rscript} <<RALLDELIM
-siglfc <- 1		# |Log2| fold change to be used as significant. Set at 1 by default, meaning a 2 fold change (log2(2)=1)
-sigpadj <- 0.05		# Adjusted p-value used as upper threshold for significance
+			# Job specific commands
+			cat >> "${dir2}/DESeq2${reanalysis}/${Rscript}" <<RALLDELIM
 
 
 # This script uses DESeq2 in R to run differential-expression analysis on a reads count matrix of genes and automatically generate some graphs.
@@ -964,7 +1191,7 @@ data[,cols]=apply(data[,cols], 2, function(x) as.numeric(as.integer(x)))								
 conditions <- factor(c(${conditionsall}))										# generate a comma-separated list of conditions/treatments for each sample. Replicates should be named the same.
 samples=as.data.frame((colnames(data)))																								# make samples list for DESeq2
 samples <- cbind(samples, conditions)
-colnames(samples)=c("sample","condition")
+colnames(samples)=c("experimental","condition")
 groups=factor(samples[,2])
 
 # Run DESeq2 to get the result for differential-expression
@@ -1007,14 +1234,14 @@ garbage <- dev.off() # Save to file
 # Heatmap of significant hits ( padj<sigpadj and |log2FoldChange|>=siglfc )
 hmcol <- colorRampPalette(brewer.pal(9, 'RdYlBu'))(100)
 counts <- counts(dds,normalized=TRUE)																								# Get normalized read counts (sorted by padj)
-counts <- counts[apply(counts, 1, function(row) all(row !=0 )),]																	# remove genes with zero reads
+counts <- counts[apply(counts, 1, function(row) all(row !=0 )),]																	# Remove genes with zero reads
 ## You will probably need to change conditions to perform a meaningful comparison here
 respairwise = results(dds, contrast=c("condition",cond1,cond${#labelsarray[@]}))																		# Select comparison to perform (for log2 changes)
 sig <- rownames(respairwise[!is.na(respairwise\$padj) & respairwise\$padj<sigpadj & abs(respairwise\$log2FoldChange)>=siglfc,])[1:30]	# Select the first 30 significant hits (sorted by padj)
 sig <- sig[!is.na(sig)]
 sigcounts <- counts(dds,normalized=TRUE)[sig,]																						# Get normalized read counts (sorted by padj) for significan genes
 try({																																# May fail if only 0 or 1 gene is significant
-	sigcounts <- sigcounts[apply(sigcounts, 1, function(row) all(row !=0 )),]														# remove genes with zero reads
+	sigcounts <- sigcounts[apply(sigcounts, 1, function(row) all(row !=0 )),]														# Remove genes with zero reads
 })
 
 # By defaults hits are not clustered and thus stay sorted by their padj value
@@ -1037,73 +1264,90 @@ pheatmap(log2(counts), col=redgreen(75), scale='row', cluster_rows=TRUE, cluster
 garbage <- dev.off() # Save to file
 
 
+# Additional optional graphs using DESeqAnalysis https://github.com/acidgenomics/DESeqAnalysis
+
+# Principal Components Analysis with labels
+try(library(DESeqAnalysis))
+pdf(paste0(output, "all-PCAlabels.pdf"), width=20, height=20)
+try(DESeqAnalysis::plotPCA(rld, label = TRUE, interestingGroups="condition"))
+garbage <- dev.off() # Save to file
+
+
 # Adapted from:
 # http://www.bioconductor.org/help/workflows/rnaseqGene/
 # https://gist.github.com/stephenturner/f60c1934405c127f09a6
 # https://dwheelerau.com/2014/02/17/how-to-use-deseq2-to-analyse-rnaseq-data/
 
 RALLDELIM
-		# Use Rscript
-		echo "Rscript ${dir2}/DESeq2/${Rscript}" >> ${dir2}/${samplename}_${job}.sbatch
+			# Use Rscript
+			echo "Rscript ${dir2}/DESeq2${reanalysis}/${Rscript} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
 
-		# Cleaning commands
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+			# Cleaning commands
+			if [ "${debug}" != "1" ]
+			then
+				# Remove .sbatch
+				echo "rm ${dir2}/${samplename}_${job}.sbatch"
+			fi
+			echo "exit 0"
+
+		} > "${dir2}/${samplename}_${job}.sbatch"
 
 		# Queue job
-		SBdeseq2=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
+		SBdeseq2=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
 		if [ -n "${SBdeseq2##* }" ]
 		then
 			SBdeseq2IDs=${SBdeseq2IDs}:${SBdeseq2##* }
 		fi
-		echo -e "\t ${samplename} DESeq2 job queued"
+		echo -e "\t-- ${samplename} analysis job queued"
+		echo  ""
 	fi
 
-	# Create R scripts for pair wise matrices
-	while read line;
+	echo -e "\t-- Queuing pairwise comparison analysis jobs"
+	echo ""
+
+	# Create R scripts for pairwise matrices
+	while read -r line;
 	do
 
 		# Variables
-		samplename=$(basename ${line} | sed 's/.genes.matrix//g')
+		samplename=$(basename "${line}" | sed 's/.genes.matrix//g')
 		Rscript=${samplename}.DESeq2.R
 
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH `if [ ! -z ${mem} ] && [ ${mem} -gt "16" ]; then echo "--mem=16000"; else echo "--mem=${mem}000"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=5:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMaccount}" ]
-		then
-			echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
+		{
+			# General SLURM parameters
+			echo '#!/bin/bash'
+			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "16" ]; then echo "--mem=16000"; else echo "--mem=${mem}000"; fi)"
+			echo "#SBATCH --time=10:00"
+			if [ -n "${SLURMemail}" ]
+			then
+				echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+			fi
+			if [ -n "${SLURMaccount}" ]
+			then
+				echo "#SBATCH --account=${SLURMaccount}"
+			fi
+			if [ -n "${SLURMpartition}" ]
+			then
+				echo "#SBATCH --partition=${SLURMpartition}"
+			fi
+			if [ -n "${SLURMqos}" ]
+			then
+				echo "#SBATCH --qos=${SLURMqos}"
+			fi
 
-		# Require previous job successful completion
-		echo "#SBATCH --dependency=afterok:${SBmatrix##* }" >> ${dir2}/${samplename}_${job}.sbatch
+			# Require previous job successful completion
+			echo "#SBATCH --dependency=afterok:${SBmatrix##* }"
 
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
+			# General commands
+			echo "mkdir -p \"${tmp}\""
+			if [ -n "${customcmd}" ]
+			then
+				echo "${customcmd}"
+			fi
 
-		# Job specific commands
-		cat >> ${dir2}/DESeq2/${Rscript} <<RDELIM
-siglfc <- 1		# |Log2| fold change to be used as significant. Set at 1 by default, meaning a 2 fold change (log2(2)=1)
-sigpadj <- 0.05		# Adjusted p-value used as upper threshold for significance
+			# Job specific commands
+			cat >> "${dir2}/DESeq2${reanalysis}/${Rscript}" <<RDELIM
 
 
 # This script uses DESeq2 in R to run differential-expression analysis on a reads count matrix of genes and automatically generate some graphs.
@@ -1124,7 +1368,7 @@ data[,cols]=apply(data[,cols], 2, function(x) as.numeric(as.integer(x)))								
 conditions <- factor(c(rep(cond1, rep1), rep(cond2, rep2)))												# generate a comma-separated list of conditions/treatments for each sample. Replicates should be named the same.
 samples=as.data.frame((colnames(data)))																	# make samples list for DESeq2
 samples <- cbind(samples, conditions)
-colnames(samples)=c("sample","condition")
+colnames(samples)=c("experimental","condition")
 groups=factor(samples[,2])
 
 # Run DESeq2 to get the result for differential-expression
@@ -1212,10 +1456,10 @@ sig <- rownames(res[!is.na(res\$padj) & res\$padj<sigpadj & abs(res\$log2FoldCha
 sig <- sig[!is.na(sig)]																					# If we have less than 30 hits, clean "NA" fields
 
 counts <- counts(dds,normalized=TRUE)																	# Get normalized read counts (sorted by padj)
-counts <- counts[apply(counts, 1, function(row) all(row !=0 )),]										# remove genes with zero reads
+counts <- counts[apply(counts, 1, function(row) all(row !=0 )),]										# Remove genes with zero reads
 sigcounts <- counts(dds,normalized=TRUE)[sig,]															# Get normalized read counts (sorted by padj) for significant genes
 try({																									# May fail if only 0 or 1 gene is significant
-sigcounts <- sigcounts[apply(sigcounts, 1, function(row) all(row !=0 )),]								# remove genes with zero reads
+sigcounts <- sigcounts[apply(sigcounts, 1, function(row) all(row !=0 )),]								# Remove genes with zero reads
 })
 
 # By defaults hits are not clustered and thus stay sorted by their padj value
@@ -1238,368 +1482,940 @@ pheatmap(log2(counts), col=redgreen(75), scale='row', cluster_rows=TRUE, cluster
 garbage <- dev.off() # Save to file
 
 
+# Additional optional graphs using DESeqAnalysis https://github.com/acidgenomics/DESeqAnalysis
+
+# Principal Components Analysis with labels
+try(library(DESeqAnalysis))
+pdf(paste0(output, cond1, "_vs_", cond2, "-PCAlabels.pdf"), width=20, height=20)
+try(DESeqAnalysis::plotPCA(rld, label = TRUE, interestingGroups="condition"))
+garbage <- dev.off() # Save to file
+
+
 # Adapted from:
 # http://www.bioconductor.org/help/workflows/rnaseqGene/
 # https://gist.github.com/stephenturner/f60c1934405c127f09a6
 # https://dwheelerau.com/2014/02/17/how-to-use-deseq2-to-analyse-rnaseq-data/
 
 RDELIM
-		# Use Rscript
-		echo "Rscript ${dir2}/DESeq2/${Rscript}" >> ${dir2}/${samplename}_${job}.sbatch
+			# Use Rscript
+			echo "Rscript ${dir2}/DESeq2${reanalysis}/${Rscript} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
 
-		# Cleaning commands
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+			# Cleaning commands
+			if [ "${debug}" != "1" ]
+			then
+				# Remove .sbatch
+				echo "rm ${dir2}/${samplename}_${job}.sbatch"
+			fi
+			echo "exit 0"
+
+		} > "${dir2}/${samplename}_${job}.sbatch"
 
 		# Queue job
-		SBdeseq2=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
+		SBdeseq2=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
 		if [ -n "${SBdeseq2##* }" ]
 		then
 			SBdeseq2IDs=${SBdeseq2IDs}:${SBdeseq2##* }
 		fi
 		echo -e "\t ${samplename} DESeq2 job queued"
 
-	done < ${dir2}/matrices
-
-
-
-	echo ""
-	echo "-- All DESeq2 jobs queued! --"
-	echo ""
+	done < "${dir2}"/matrices
 
 fi
 
-if [[ ${diffexp} == "cufflinks" ]] || [[ ${diffexp} == "both" ]]
+
+
+if [ "${diffexp}" = "cufflinks" ] || [ "${diffexp}" = "both" ]
 then
 
-	######################
-	## Merge transcripts
-	job="cuffmerge"
-	# We are no longer processing sample files, but GTF files
-	samplename="GTFs"
-
-	# General SLURM parameters
-	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --time=8:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${SLURMemail}" ]
-	then
-		echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMaccount}" ]
-	then
-		echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMpartition}" ]
-	then
-		echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMqos}" ]
-	then
-		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-
-	# Require previous job successful completion
-	echo "#SBATCH --dependency=afterok${SBcufflinksIDs}" >> ${dir2}/${samplename}_${job}.sbatch
-
-	# General commands
-	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${customcmd}" ]
-	then
-		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-
-	# Job specific commands
-	#echo "cuffmerge -p ${threads} -g ${gtf}/genes.gtf -s ${fasta_refgenome} -o ${dir2} ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "cuffmerge -p ${threads} -g ${gtf}/genes.gtf -s ${fasta_refgenome} -o ${tmp} ${dir2}/assembly_GTF_list.txt || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "cp ${tmp}/merged.gtf ${dir2}/merged.gtf" >> ${dir2}/${samplename}_${job}.sbatch
-
-	# Cleaning commands
-	echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
-	# remove .sbatch
-	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
-
-	# Queue job
-	SBcuffmerge=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-	echo -e "-- Cuffmerge job queued --"
-
-
-
-	######################
-	## Quantify transcripts
-	job="cuffquant"
-
 	echo ""
-	echo "-- Queuing quantification jobs --"
-	echo ""
+	echo "-- Cufflinks --"
 
-	while read line;
-	do
+	if [ -z "${reanalysis}" ]
+	then
 
-		# General variables
-		read1=$(echo ${line} | cut -d" " -f1)
-		read2=$(echo ${line} | cut -d" " -f2)
-		samplename=$(echo ${read1} | awk -F_R1 '{print $1}')
-		bamsortedout=$(basename ${read1} | sed "s/_R1${fileext}/.sorted.bam/g")
 
-		# General SLURM parameters
-		echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "#SBATCH --time=8:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${SLURMemail}" ]
-		then
-			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMaccount}" ]
-		then
-			echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMpartition}" ]
-		then
-			echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
-		if [ -n "${SLURMqos}" ]
-		then
-			echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
 
-		# Require previous job successful completion
-		echo "#SBATCH --dependency=afterok:${SBcuffmerge##* }" >> ${dir2}/${samplename}_${job}.sbatch
+		######################
+		## Merge transcripts
 
-		# General commands
-		echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-		if [ -n "${customcmd}" ]
-		then
-			echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-		fi
+		job="cuffmerge"
 
-		# Job specific commands
-		echo "cuffquant -p ${threads} -o ${tmp}/${samplename} ${dir2}/merged.gtf ${dir2}/${bamsortedout} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "cp -rf ${tmp}/${samplename}/abundances.cxb ${dir2}/${samplename}.cuff/abundances.cxb" >> ${dir2}/${samplename}_${job}.sbatch
+		# Variables
+		# We are no longer processing sample files, but GTF files
+		samplename="GTFs"
 
-		# Cleaning commands
-		# remove .sbatch
-		echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-		echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+		{
+			# General SLURM parameters
+			echo '#!/bin/bash'
+			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --time=8:00:00"
+			if [ -n "${SLURMemail}" ]
+			then
+				echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+			fi
+			if [ -n "${SLURMaccount}" ]
+			then
+				echo "#SBATCH --account=${SLURMaccount}"
+			fi
+			if [ -n "${SLURMpartition}" ]
+			then
+				echo "#SBATCH --partition=${SLURMpartition}"
+			fi
+			if [ -n "${SLURMqos}" ]
+			then
+				echo "#SBATCH --qos=${SLURMqos}"
+			fi
+
+			# Require previous job successful completion
+			echo "#SBATCH --dependency=afterok${SBcufflinksIDs}"
+
+			# General commands
+			echo "mkdir -p \"${tmp}\""
+			if [ -n "${customcmd}" ]
+			then
+				echo "${customcmd}"
+			fi
+
+			# Job specific commands
+			# Generate a list of sample specific transcripts.gtf files to be merged
+			echo "find ${dir2}/*.cuff/ -maxdepth 1 -type f -name 'transcripts.gtf' > ${dir2}/assembly_GTF_list.txt"
+			echo "cuffmerge -p ${threads} -g ${gtf} -s ${fasta_refgenome} -o ${dir2} ${dir2}/assembly_GTF_list.txt || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+			# Cleaning commands
+			if [ "${debug}" != "1" ]
+			then
+				echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt"
+				# Remove .sbatch
+				echo "rm ${dir2}/${samplename}_${job}.sbatch"
+			fi
+			echo "exit 0"
+
+		} > "${dir2}/${samplename}_${job}.sbatch"
 
 		# Queue job
-		SBcuffquant=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-		SBcuffquantIDs=${SBcuffquantIDs}:${SBcuffquant##* }
-		echo -e "\t ${samplename} cuffquant job queued"
-
-	done < ${dir2}/Fastqs
+		SBcuffmerge=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+		echo ""
+		echo -e "\t-- Cuffmerge job queued"
 
 
 
-	echo ""
-	echo "-- All quantification jobs queued! --"
-	echo ""
+		######################
+		## Quantify transcripts
+
+		job="cuffquant"
+
+		echo ""
+		echo -e "\t-- Queuing quantification jobs"
+		echo ""
+
+		while read -r line;
+		do
+			# Variables
+			read1=$(echo "${line}" | cut -f1)
+			read2=$(echo "${line}" | cut -f2)
+			samplename=$(echo "${read1}" | awk -F_R1 '{print $1}')
+			bamsortedout=$(basename "${read1}" | sed "s/_R1${fileext}/.sorted.bam/g")
+
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --time=8:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				echo "#SBATCH --dependency=afterok:${SBcuffmerge##* }"
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				echo "cuffquant -p ${threads} -o ${dir2}/${samplename}.cuff ${dir2}/merged.gtf ${dir2}/${bamsortedout} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBcuffquant=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBcuffquantIDs=${SBcuffquantIDs}:${SBcuffquant##* }
+			echo -e "\t ${samplename} cuffquant job queued"
+
+		done < "${dir2}/Fastqs"
+
+	fi
 
 
 
 	######################
 	## Compare expression levels
+
 	job="cuffdiff"
+
+	# Variables
 	# We are no longer processing sample files, but CXBs files
 	samplename="CXBs"
 
-	# General SLURM parameters
-	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --time=2:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${SLURMemail}" ]
-	then
-		echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMaccount}" ]
-	then
-		echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMpartition}" ]
-	then
-		echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMqos}" ]
-	then
-		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
+	{
+		# General SLURM parameters
+		echo '#!/bin/bash'
+		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --time=2:00:00"
+		if [ -n "${SLURMemail}" ]
+		then
+			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+		fi
+		if [ -n "${SLURMaccount}" ]
+		then
+			echo "#SBATCH --account=${SLURMaccount}"
+		fi
+		if [ -n "${SLURMpartition}" ]
+		then
+			echo "#SBATCH --partition=${SLURMpartition}"
+		fi
+		if [ -n "${SLURMqos}" ]
+		then
+			echo "#SBATCH --qos=${SLURMqos}"
+		fi
 
-	# Require previous job successful completion
-	echo "#SBATCH --dependency=afterok${SBcuffquantIDs}" >> ${dir2}/${samplename}_${job}.sbatch
+		# Require previous job successful completion
+		if [ -z "${reanalysis}" ]
+		then
+			echo "#SBATCH --dependency=afterok${SBcuffquantIDs}"
+		fi
 
-	# General commands
-	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${customcmd}" ]
-	then
-		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
+		# General commands
+		echo "mkdir -p \"${tmp}\""
+		if [ -n "${customcmd}" ]
+		then
+			echo "${customcmd}"
+		fi
 
-	# Job specific commands
-	echo "[ -d ${dir2}/ExpDiff ] && rm -rf ${dir2}/ExpDiff" >> ${dir2}/${samplename}_${job}.sbatch
-	#echo "cuffdiff -u -p ${threads} -b ${fasta_refgenome} ${dir2}/merged.gtf ${dir2}/`echo ${groupedsamples} | sed "s#,#.cuff/abundances.cxb,${dir2}/#g;s# #.cuff/abundances.cxb ${dir2}/#g"`.cuff/abundances.cxb -L ${labels} -o ${dir2}/ExpDiff || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "cuffdiff -u -p ${threads} -b ${fasta_refgenome} ${dir2}/merged.gtf ${dir2}/`echo ${groupedsamples} | sed "s#,#.cuff/abundances.cxb,${dir2}/#g;s# #.cuff/abundances.cxb ${dir2}/#g"`.cuff/abundances.cxb -L ${labels} -o ${tmp}/ExpDiff || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "cp -rf ${tmp}/ExpDiff ${dir2}/ExpDiff" >> ${dir2}/${samplename}_${job}.sbatch
+		# Job specific commands
+		echo "cuffdiff -u -p ${threads} -b ${fasta_refgenome} ${dir2}/merged.gtf ${dir2}/$(echo "${groupedsamples}" | sed "s#,#.cuff/abundances.cxb,${dir2}/#g;s# #.cuff/abundances.cxb ${dir2}/#g").cuff/abundances.cxb -L ${labels} -o ${dir2}/Cufflinks${reanalysis} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
 
-	# Cleaning commands
-	echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
-	# remove .sbatch
-	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+		# Cleaning commands
+		if [ "${debug}" != "1" ]
+		then
+			# Remove .sbatch
+			echo "rm ${dir2}/${samplename}_${job}.sbatch"
+		fi
+		echo "exit 0"
+
+	} > "${dir2}/${samplename}_${job}.sbatch"
 
 	# Queue job
-	SBcuffdiff=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-	echo -e "-- Cuffdiff job queued --"
+	SBcuffdiff=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+	echo ""
+	echo -e "\t-- Cuffdiff job queued"
 
 
 
 	######################
-	## Compare expression levels
+	## Normalize expression levels
+
 	job="cuffnorm"
 
-	# General SLURM parameters
-	echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "#SBATCH --time=1:00:00" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${SLURMemail}" ]
-	then
-		echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMaccount}" ]
-	then
-		echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMpartition}" ]
-	then
-		echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
-	if [ -n "${SLURMqos}" ]
-	then
-		echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
+	{
+		# General SLURM parameters
+		echo '#!/bin/bash'
+		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --time=1:00:00"
+		if [ -n "${SLURMemail}" ]
+		then
+			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+		fi
+		if [ -n "${SLURMaccount}" ]
+		then
+			echo "#SBATCH --account=${SLURMaccount}"
+		fi
+		if [ -n "${SLURMpartition}" ]
+		then
+			echo "#SBATCH --partition=${SLURMpartition}"
+		fi
+		if [ -n "${SLURMqos}" ]
+		then
+			echo "#SBATCH --qos=${SLURMqos}"
+		fi
 
-	# Require previous job successful completion
-	echo "#SBATCH --dependency=afterok${SBcuffquantIDs}" >> ${dir2}/${samplename}_${job}.sbatch
+		# Require previous job successful completion
+		if [ -z "${reanalysis}" ]
+		then
+			echo "#SBATCH --dependency=afterok${SBcuffquantIDs}"
+		fi
 
-	# General commands
-	echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-	if [ -n "${customcmd}" ]
-	then
-		echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-	fi
+		# General commands
+		echo "mkdir -p \"${tmp}\""
+		if [ -n "${customcmd}" ]
+		then
+			echo "${customcmd}"
+		fi
 
-	# Job specific commands
-	echo "[ -d ${dir2}/Normalized ] && rm -rf ${dir2}/Normalized" >> ${dir2}/${samplename}_${job}.sbatch
-	#echo "cuffnorm -p ${threads} ${dir2}/merged.gtf ${dir2}/`echo ${groupedsamples} | sed "s#,#.cuff/abundances.cxb,${dir2}/#g;s# #.cuff/abundances.cxb ${dir2}/#g"`.cuff/abundances.cxb -L ${labels} -o ${dir2}/Normalized || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "cuffnorm -p ${threads} ${dir2}/merged.gtf ${dir2}/`echo ${groupedsamples} | sed "s#,#.cuff/abundances.cxb,${dir2}/#g;s# #.cuff/abundances.cxb ${dir2}/#g"`.cuff/abundances.cxb -L ${labels} -o ${tmp}/Normalized || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "cp -rf ${tmp}/Normalized ${dir2}/Normalized" >> ${dir2}/${samplename}_${job}.sbatch
+		# Job specific commands
+		echo "cuffnorm -p ${threads} ${dir2}/merged.gtf ${dir2}/$(echo "${groupedsamples}" | sed "s#,#.cuff/abundances.cxb,${dir2}/#g;s# #.cuff/abundances.cxb ${dir2}/#g").cuff/abundances.cxb -L ${labels} -o ${dir2}/Cufflinks${reanalysis}/Normalized || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
 
-	# Cleaning commands
-	echo "[ -f ${dir2}/assembly_GTF_list.txt ] && rm ${dir2}/assembly_GTF_list.txt" >> ${dir2}/${samplename}_${job}.sbatch
-	# remove .sbatch
-	echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-	echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+		# Cleaning commands
+		if [ "${debug}" != "1" ]
+		then
+			# Remove .sbatch
+			echo "rm ${dir2}/${samplename}_${job}.sbatch"
+		fi
+		echo "exit 0"
+
+	} > "${dir2}/${samplename}_${job}.sbatch"
 
 	# Queue job
-	SBcuffnorm=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
-	echo -e "-- Cuffnorm job queued --"
+	SBcuffnorm=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+	echo ""
+	echo -e "\t-- Cuffnorm job queued"
+
 fi
+
+
+
+######################
+## MAJIQ Splicing variant analysis
+
+if [ "${splicing}" = "majiq" ] || [ "${splicing}" = "both" ]
+then
+
+	echo ""
+	echo "-- MAJIQ --"
+
+	job="majiq"
+
+	mkdir -p "${dir2}/MAJIQ${reanalysis}"
+
+
+
+	######################
+	## Generate config file
+
+	# Variables
+	IFS="," read -r -a labelsarray <<< "${labels}"
+	IFS=" " read -r -a samplesarray <<< "${groupedsamples}"
+	declare -a replicatesarray
+
+# Not needed since MAJIQ 2.2
+#	if [ -z "${readlength}" ];
+#	then
+#		# Guess readlength by looking at the first fastq file
+#		readlength=$($(if [ "${fileext}" = ".fastq.gz" ]; then echo "zcat"; else echo "cat"; fi) "${dir}"/"$(head -1 "${dir2}"/files1)" | head -1000 | awk '{if(NR%4==2 && length > max_length) {max_length=length} } END{print max_length}')
+#	fi
+
+	cat > "${dir2}/MAJIQ${reanalysis}/config" <<MBDELIM
+[info]
+#readlen=${readlength}
+bamdirs=${dir2}
+genome=${genomebuild}
+strandness=${strandness}
+[experiments]
+MBDELIM
+
+	# Generate an array with sample replicate names
+	repN="0"
+	while [ ${repN} -lt ${#labelsarray[@]} ]
+	do
+		replicatesarray[${repN}]="${samplesarray[${repN}]//,/.sorted,}"
+		repN=$((repN + 1))
+	done
+
+	# Generate the majiq "experiments" lines from the config file
+	condA="0"
+	while [ ${condA} -lt ${#labelsarray[@]} ]
+	do
+		echo "${labelsarray[${condA}]}=${replicatesarray[${condA}]}.sorted" >> "${dir2}/MAJIQ${reanalysis}/config"
+		condA=$((condA + 1))
+	done
+
+
+
+	######################
+	## LSV detection using majiq build
+
+	# Variables
+	# We are no longer processing sample files, but doing majiq
+	samplename="build"
+
+	{
+		# General SLURM parameters
+		echo '#!/bin/bash'
+		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+		echo "#SBATCH --cpus-per-task=${threads}"
+		echo "#SBATCH --time=2:00:00"
+		if [ -n "${SLURMemail}" ]
+		then
+			echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+		fi
+		if [ -n "${SLURMaccount}" ]
+		then
+			echo "#SBATCH --account=${SLURMaccount}"
+		fi
+		if [ -n "${SLURMpartition}" ]
+		then
+			echo "#SBATCH --partition=${SLURMpartition}"
+		fi
+		if [ -n "${SLURMqos}" ]
+		then
+			echo "#SBATCH --qos=${SLURMqos}"
+		fi
+
+		# Require previous job successful completion
+		if [ -z "${reanalysis}" ]
+		then
+			echo "#SBATCH --dependency=afterok${SBalignIDs}"
+		fi
+
+		# General commands
+		echo "mkdir -p \"${tmp}\""
+		if [ -n "${customcmd}" ]
+		then
+			echo "${customcmd}"
+		fi
+
+		# Job specific commands
+		# MAJIQ build
+		echo "majiq build ${gff3} -c ${dir2}/MAJIQ${reanalysis}/config -j ${threads} -o ${dir2}/MAJIQ${reanalysis}/ --min-intronic-cov 1 --simplify || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+		# Cleaning commands
+		if [ "${debug}" != "1" ]
+		then
+			echo "rm ${dir2}/MAJIQ${reanalysis}/majiq.log"
+			# Keeping .sj files by default since MAJIQ 2.2 for incremental build compatibility.
+			#echo "rm ${dir2}/MAJIQ${reanalysis}/*.sorted.sj"
+			# Remove .sbatch
+			echo "rm ${dir2}/${samplename}_${job}.sbatch"
+		fi
+		echo "exit 0"
+
+	} > "${dir2}/${samplename}_${job}.sbatch"
+
+	# Queue job
+	SBmajiqbuild=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+	echo ""
+	echo -e "\t-- Build job queued"
+
+
+
+	######################
+	## PSI quantification
+
+	if [ "${psi}" = "1" ]
+	then
+
+		echo ""
+		echo -e "\t-- Queuing PSI jobs"
+		echo ""
+
+		# Variables
+		IFS=" " read -r -a samplesarray <<< "${groupedsamples//,/ }"
+
+		# Perform PSI quantification on each individual sample
+		condA="0"
+		while [ ${condA} -lt ${#samplesarray[@]} ]
+		do
+			# Variables
+			samplename="psi_${samplesarray[${condA}]}"
+
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --time=30:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				echo "#SBATCH --dependency=afterok:${SBmajiqbuild##* }"
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				# MAJIQ PSI analysis
+				echo "majiq psi ${dir2}/MAJIQ${reanalysis}/${samplesarray[${condA}]}.sorted.majiq -j $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "1"; else echo "${threads}"; fi) -o ${dir2}/MAJIQ${reanalysis}/ -n ${samplesarray[${condA}]} || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBmajiqpsi=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBmajiqpsiIDs=${SBmajiqpsiIDs}:${SBmajiqpsi##* }
+			echo -e "\t ${samplesarray[${condA}]} PSI job queued"
+
+			condA=$((condA + 1))
+		done
+	fi
+
+
+
+	######################
+	## Delta PSI quantification
+
+	echo ""
+	echo -e "\t-- Queuing Delta PSI jobs"
+	echo ""
+
+	# Variables
+	IFS="," read -r -a labelsarray <<< "${labels}"
+	IFS=" " read -r -a samplesarray <<< "${groupedsamples}"
+	declare -a replicatesarray
+
+	# Generate an array with sample replicate names
+	repN="0"
+	while [ ${repN} -lt ${#labelsarray[@]} ]
+	do
+		replicatesarray[${repN}]="${samplesarray[${repN}]//,/.sorted.majiq ${dir2}/MAJIQ${reanalysis}/}"
+		repN=$((repN + 1))
+	done
+
+	# Generate pair-wise comparison matrices
+	condA="0"
+	condB="0"
+	while [ ${condA} -lt ${#labelsarray[@]} ]
+	do
+		condB=$((condA + 1))
+		while [ ${condB} -lt ${#labelsarray[@]} ]
+		do
+			# Variables
+			samplename="deltapsi_${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}"
+
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --time=30:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				echo "#SBATCH --dependency=afterok:${SBmajiqbuild##* }"
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				# By default we only use 1 cpu, easier to be backfilled, change if needed.
+				# MAJIQ Delta PSI analysis
+				# Job likely to fail for some of the odd pair-wise comparisons. This way will fail silently and remove the .sbatch and the empty folder.
+				echo "majiq deltapsi -grp1 ${dir2}/MAJIQ${reanalysis}/${replicatesarray[${condA}]}.sorted.majiq -grp2 ${dir2}/MAJIQ${reanalysis}/${replicatesarray[${condB}]}.sorted.majiq -j $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "1"; else echo "${threads}"; fi) -o ${dir2}/MAJIQ${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}/ -n ${labelsarray[${condA}]} ${labelsarray[${condB}]} || { rm -rf ${dir2}/MAJIQ${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}/ ${dir2}/${samplename}_${job}.sbatch; exit 0; }"
+				# Generate corresponding VOILA tsv files with default filtering options
+				echo "voila tsv -j $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "1"; else echo "${threads}"; fi) ${dir2}/MAJIQ${reanalysis}/splicegraph.sql ${dir2}/MAJIQ${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}/${labelsarray[${condA}]}_${labelsarray[${condB}]}.deltapsi.voila -f ${dir2}/MAJIQ${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.filtered.tsv || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					echo "rm ${dir2}/MAJIQ${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}/deltapsi_majiq.log"
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBmajiqdeltapsi=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBmajiqdeltapsiIDs=${SBmajiqdeltapsiIDs}:${SBmajiqdeltapsi##* }
+			echo -e "\t ${labelsarray[${condA}]}_vs_${labelsarray[${condB}]} Delta PSI job queued"
+
+			condB=$((condB + 1))
+		done
+
+		condA=$((condA + 1))
+	done
+
+fi
+
+
+
+######################
+## LeafCutter Splicing variant analysis
+
+if [ "${splicing}" = "leafcutter" ] || [ "${splicing}" = "both" ]
+then
+
+	echo ""
+	echo "-- LeafCutter --"
+
+	job="leafcutter"
+
+	mkdir -p "${dir2}/LeafCutter${reanalysis}"
+
+
+
+	######################
+	## Intron clustering
+
+	if [ -z "${reanalysis}" ]
+	then
+		# Variables
+		# We are no longer processing sample files, but doing intron clustering
+		samplename="intron-clust"
+
+		{
+			# General SLURM parameters
+			echo '#!/bin/bash'
+			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+			echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+			echo "#SBATCH --time=30:00"
+			if [ -n "${SLURMemail}" ]
+			then
+				echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+			fi
+			if [ -n "${SLURMaccount}" ]
+			then
+				echo "#SBATCH --account=${SLURMaccount}"
+			fi
+			if [ -n "${SLURMpartition}" ]
+			then
+				echo "#SBATCH --partition=${SLURMpartition}"
+			fi
+			if [ -n "${SLURMqos}" ]
+			then
+				echo "#SBATCH --qos=${SLURMqos}"
+			fi
+
+			# Require previous job successful completion
+			echo "#SBATCH --dependency=afterok${SBleafjuncIDs}"
+
+			# General commands
+			echo "mkdir -p \"${tmp}\""
+			if [ -n "${customcmd}" ]
+			then
+				echo "${customcmd}"
+			fi
+
+			# Job specific commands
+			echo "python ${leafCutterDir}/clustering/leafcutter_cluster.py -j ${dir2}/juncfiles.txt -r ${dir2}/ || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+			# Cleaning commands
+			if [ "${debug}" != "1" ]
+			then
+				echo "rm ${dir2}/juncfiles.txt"
+				echo "rm ${dir2}/*.junc"
+				echo "rm ${dir2}/*.junc.leafcutter.sorted.gz"
+				echo "rm ${dir2}/leafcutter_perind.counts.gz"
+				echo "rm ${dir2}/leafcutter_pooled"
+				echo "rm ${dir2}/leafcutter_refined"
+				echo "rm ${dir2}/leafcutter_sortedlibs"
+				# Remove .sbatch
+				echo "rm ${dir2}/${samplename}_${job}.sbatch"
+			fi
+			echo "exit 0"
+
+		} > "${dir2}/${samplename}_${job}.sbatch"
+
+		# Queue job
+		SBleafintclust=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+		echo ""
+		echo -e "\t-- Intron clustering job queued"
+	fi
+
+
+
+	######################
+	## Grouped differential intron excision analysis, plot and leafviz prep jobs for faster processing
+
+	echo ""
+	echo -e "\t-- Queuing differential analysis, plotting and leafviz prep jobs"
+	echo ""
+
+	# Variables
+	IFS="," read -r -a labelsarray <<< "${labels}"
+	IFS=" " read -r -a samplesarray <<< "${groupedsamples}"
+	condA="0"
+	condB="0"
+
+	while [ ${condA} -lt ${#labelsarray[@]} ]
+	do
+		condB=$((condA + 1))
+		while [ ${condB} -lt ${#labelsarray[@]} ]
+		do
+			# Variables
+			samplename="diffex_${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}"
+
+			# Generate pair-wise comparison groups_file files
+			echo -e "${samplesarray[${condA}]//,/\t${labelsarray[${condA}]}\n}\t${labelsarray[${condA}]}" > "${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt"
+			echo -e "${samplesarray[${condB}]//,/\t${labelsarray[${condB}]}\n}\t${labelsarray[${condB}]}" >> "${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt"
+
+			# Check number of replicates in each groups to fine tune -i and -g on leafcutter_ds.R is less than 4 samples
+			IFS="," read -r -a replicatesA <<< "${samplesarray[${condA}]}"
+			IFS="," read -r -a replicatesB <<< "${samplesarray[${condB}]}"
+			if [ ${#replicatesA[@]} -lt ${#replicatesB[@]} ]
+			then
+				numsamp="${#replicatesA[@]}"
+			else
+				numsamp="${#replicatesB[@]}"
+			fi
+
+			{
+				# General SLURM parameters
+				echo '#!/bin/bash'
+				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+				echo "#SBATCH --cpus-per-task=${threads}"
+				echo "#SBATCH --time=1:00:00"
+				if [ -n "${SLURMemail}" ]
+				then
+					echo "#SBATCH --mail-type=FAIL --mail-user=${SLURMemail}"
+				fi
+				if [ -n "${SLURMaccount}" ]
+				then
+					echo "#SBATCH --account=${SLURMaccount}"
+				fi
+				if [ -n "${SLURMpartition}" ]
+				then
+					echo "#SBATCH --partition=${SLURMpartition}"
+				fi
+				if [ -n "${SLURMqos}" ]
+				then
+					echo "#SBATCH --qos=${SLURMqos}"
+				fi
+
+				# Require previous job successful completion
+				if [ -z "${reanalysis}" ]
+				then
+					echo "#SBATCH --dependency=afterok:${SBleafintclust##* }"
+				fi
+
+				# General commands
+				echo "mkdir -p \"${tmp}\""
+				if [ -n "${customcmd}" ]
+				then
+					echo "${customcmd}"
+				fi
+
+				# Job specific commands
+				# Differential intron excision analysis
+				echo "${leafCutterDir}/scripts/leafcutter_ds.R -p ${threads} -o ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]} $(if [ -n "${exonfile}" ]; then echo "-e ${exonfile}"; fi) $(if [ "${numsamp}" -le 4 ]; then echo "-i ${numsamp} -g ${numsamp}"; fi) ${dir2}/leafcutter_perind_numers.counts.gz ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				# Prepare results for visualisation
+				# Job will fail if there are no significant clusters, instead silently exit. Change the FDR cutoff and run again using the ShinyLeafviz script.
+				echo "${leafCutterDir}/leafviz/prepare_results.R -f 0.05 -m ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt -c ${labelsarray[${condA}]}_vs_${labelsarray[${condB}]} -o ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.RData ${dir2}/leafcutter_perind_numers.counts.gz ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_cluster_significance.txt ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_effect_sizes.txt ${anncode} || { rm ${dir2}/${samplename}_${job}.sbatch; exit 0; }"
+				# Plotting splice junctions
+				echo "${leafCutterDir}/scripts/ds_plots.R -f 0.05 -o ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.pdf $(if [ -n "${exonfile}" ]; then echo "-e ${exonfile}"; fi) ${dir2}/leafcutter_perind_numers.counts.gz ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_cluster_significance.txt || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${samplename}_${job}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+
+				# Cleaning commands
+				if [ "${debug}" != "1" ]
+				then
+					# Remove .sbatch
+					echo "rm ${dir2}/${samplename}_${job}.sbatch"
+				fi
+				echo "exit 0"
+
+			} > "${dir2}/${samplename}_${job}.sbatch"
+
+			# Queue job
+			SBleafdiffex=$(until sbatch "${dir2}/${samplename}_${job}.sbatch"; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done)
+			SBleafdiffexIDs=${SBleafdiffexIDs}:${SBleafdiffex##* }
+			echo -e "\t ${labelsarray[${condA}]}_vs_${labelsarray[${condB}]} analysis job queued"
+
+			# Create an easy to launch script for the Shiny app, still need to deal with port forfarding on your own
+			{
+				echo '#!/bin/bash'
+				echo "${customcmd}"
+				echo ""
+				echo 'leafFDR="0.05"'
+				echo ""
+				echo '# Uncomment to plot splice junctions with a different adjusted p value threshold'
+				echo "#${leafCutterDir}/scripts/ds_plots.R -f \${leafFDR} -o ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.pdf $(if [ -n "${exonfile}" ]; then echo "-e ${exonfile}"; fi) ${dir2}/leafcutter_perind_numers.counts.gz ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_cluster_significance.txt"
+				echo ""
+				echo '# Uncomment to prepare results for visualisation with a different adjusted p value threshold'
+				echo "#${leafCutterDir}/leafviz/prepare_results.R -f \${leafFDR} -m ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_group.txt -c ${labelsarray[${condA}]}_vs_${labelsarray[${condB}]} -o ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.RData ${dir2}/leafcutter_perind_numers.counts.gz ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_cluster_significance.txt ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_effect_sizes.txt ${anncode} || exit 0"
+				echo ""
+				echo '# Actual command to prepare results for visualisation'
+				echo "cd ${leafCutterDir}/leafviz/"
+				echo "echo 'Launching leafviz: you may need to have to deal with port forwarding on your own to access the website'"
+				echo "./run_leafviz.R ${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}.RData"
+			} > "${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_ShinyLeafviz.sh"
+			chmod +x "${dir2}/LeafCutter${reanalysis}/${labelsarray[${condA}]}_vs_${labelsarray[${condB}]}_ShinyLeafviz.sh"
+
+			condB=$((condB + 1))
+		done
+
+		condA=$((condA + 1))
+	done
+
+fi
+
 
 
 ######################
 ## Final processing of result files
+
 job="notif"
-# We are no longer processing sample files
-samplename="`basename ${dir2}`-RNAseq"
 
-# General SLURM parameters
-echo '#!/bin/bash' > ${dir2}/${samplename}_${job}.sbatch
-echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append" >> ${dir2}/${samplename}_${job}.sbatch
-echo "#SBATCH `if [ ! -z ${threads} ] && [ ${threads} -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
-echo "#SBATCH --time=3:00" >> ${dir2}/${samplename}_${job}.sbatch
-if [ -n "${SLURMemail}" ]
-then
-	echo "#SBATCH --mail-type=FAIL,END --mail-user=${SLURMemail}" >> ${dir2}/${samplename}_${job}.sbatch
-fi
-if [ -n "${SLURMaccount}" ]
-then
-	echo "#SBATCH --account=${SLURMaccount}" >> ${dir2}/${samplename}_${job}.sbatch
-fi
-if [ -n "${SLURMpartition}" ]
-then
-	echo "#SBATCH --partition=${SLURMpartition}" >> ${dir2}/${samplename}_${job}.sbatch
-fi
-if [ -n "${SLURMqos}" ]
-then
-	echo "#SBATCH --qos=${SLURMqos}" >> ${dir2}/${samplename}_${job}.sbatch
-fi
+# Variables
+# We are no longer processing sample files, using project name
+samplename="$(basename "${dir2}")-RNAseq"
 
-# Require previous job successful completion
-echo "#SBATCH --dependency=afterok`if [ -n \"${SBcuffdiff##* }\" ]; then echo \":${SBcuffdiff##* }\"; fi``if [ -n \"${SBcuffnorm##* }\" ]; then echo \":${SBcuffnorm##* }\"; fi``if [ -n \"${SBfqcIDs}\" ]; then echo \"${SBfqcIDs}\"; fi``if [ -n \"${SBmatrix}\" ]; then echo \":${SBmatrix##* }\"; fi``if [ -n \"${SBdeseq2IDs}\" ]; then echo \"${SBdeseq2IDs}\"; fi`" >> ${dir2}/${samplename}_${job}.sbatch
+{
+	# General SLURM parameters
+	echo '#!/bin/bash'
+	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
+	echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+	echo "#SBATCH --time=10:00"
+	if [ -n "${SLURMemail}" ]
+	then
+		echo "#SBATCH --mail-type=FAIL,END --mail-user=${SLURMemail}"
+	fi
+	if [ -n "${SLURMaccount}" ]
+	then
+		echo "#SBATCH --account=${SLURMaccount}"
+	fi
+	if [ -n "${SLURMpartition}" ]
+	then
+		echo "#SBATCH --partition=${SLURMpartition}"
+	fi
+	if [ -n "${SLURMqos}" ]
+	then
+		echo "#SBATCH --qos=${SLURMqos}"
+	fi
 
-# General commands
-echo "mkdir -p ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-if [ -n "${customcmd}" ]
-then
-	echo "${customcmd}" >> ${dir2}/${samplename}_${job}.sbatch
-fi
+	# Require previous job successful completion
+	echo "#SBATCH --dependency=afterok$(if [ -n "${SBcuffdiff##* }" ]; then echo ":${SBcuffdiff##* }"; fi)$(if [ -n "${SBcuffnorm##* }" ]; then echo ":${SBcuffnorm##* }"; fi)$(if [ -n "${SBfqcIDs}" ]; then echo "${SBfqcIDs}"; fi)$(if [ -n "${SBdeseq2IDs}" ]; then echo "${SBdeseq2IDs}"; fi)$(if [ -n "${SBmajiqpsiIDs}" ]; then echo "${SBmajiqpsiIDs}"; fi)$(if [ -n "${SBmajiqdeltapsiIDs}" ]; then echo "${SBmajiqdeltapsiIDs}"; fi)$(if [ -n "${SBleafdiffexIDs}" ]; then echo "${SBleafdiffexIDs}"; fi)"
 
-# Job specific commands
-# Creating folders for archive
-echo "[ -f ${dir2}/Results_`basename ${dir2}`.tar.gz ] && rm ${dir2}/Results_`basename ${dir2}`.tar.gz" >> ${dir2}/${samplename}_${job}.sbatch
-echo "[ -d ${dir2}/Results_`basename ${dir2}` ] && rm -rf ${dir2}/Results_`basename ${dir2}`" >> ${dir2}/${samplename}_${job}.sbatch
-echo "mkdir -p ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-# List all csv, html, pdf, results and zip files
-echo "csvarchive=\`ls ${dir2}/*.csv\`" >> ${dir2}/${samplename}_${job}.sbatch
-echo "htmlarchive=\`ls ${dir2}/*.html\`" >> ${dir2}/${samplename}_${job}.sbatch
-echo "pdfarchive=\`ls ${dir2}/*.pdf\`" >> ${dir2}/${samplename}_${job}.sbatch
-echo "resultsarchive=\`ls ${dir2}/*.results\`" >> ${dir2}/${samplename}_${job}.sbatch
-echo "ziparchive=\`ls ${dir2}/*.zip\`" >> ${dir2}/${samplename}_${job}.sbatch
-# Create an archive of all csv, html, pdf and zip files for easy download
-echo "for i in \${csvarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
-echo "for i in \${htmlarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
-echo "for i in \${pdfarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
-echo "for i in \${resultsarchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
-echo "for i in \${ziparchive}; do cp -rf \$i ${dir2}/Results_`basename ${dir2}`/\`basename \$i\`; done" >> ${dir2}/${samplename}_${job}.sbatch
-echo "cp -rf ${dir2}/ExpDiff ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-echo "cp -rf ${dir2}/Normalized ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-echo "cp -rf ${dir2}/DESeq2 ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-echo "cp -rf ${dir2}/merged.gtf ${dir2}/Results_`basename ${dir2}`/" >> ${dir2}/${samplename}_${job}.sbatch
-echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results_`basename ${dir2}`.tar.gz Results_`basename ${dir2}`" >> ${dir2}/${samplename}_${job}.sbatch
-if [ -n "${iftttkey}" ] && [ -n "${iftttevent}" ]
-then
-	# Trigger IFTTT maker channel event when it's ready, nice isn't it?
-	echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"`basename ${dir2}`\" , \"value2\" : \"`whoami`\"}' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}" >> ${dir2}/${samplename}_${job}.sbatch
-fi
+	# General commands
+	echo "mkdir -p \"${tmp}\""
+	if [ -n "${customcmd}" ]
+	then
+		echo "${customcmd}"
+	fi
 
-# Cleaning commands
-# Remove error files upon successful completion. Comment to disable.
-echo "rm ${dir2}/*.err" >> ${dir2}/${samplename}_${job}.sbatch
-# Remove logs folder upon successfull completion. Comment to disable.
-echo "rm -rf ${dir2}/logs" >> ${dir2}/${samplename}_${job}.sbatch
-# Remove Temporary directory
-echo "rm -rf ${tmp}" >> ${dir2}/${samplename}_${job}.sbatch
-# remove .sbatch
-echo "rm ${dir2}/${samplename}_${job}.sbatch" >> ${dir2}/${samplename}_${job}.sbatch
-echo "exit 0" >> ${dir2}/${samplename}_${job}.sbatch
+	# Job specific commands
+	# Creating folders for archive
+	echo "[ -f ${dir2}/Results_$(basename "${dir2}").tar.gz ] && rm ${dir2}/Results_$(basename "${dir2}").tar.gz"
+	echo "[ -d ${dir2}/Results_$(basename "${dir2}") ] && rm -rf ${dir2}/Results_$(basename "${dir2}")"
+	echo "mkdir -p ${dir2}/Results_$(basename "${dir2}")/"
+	# List all csv, html, pdf, results and zip files
+	echo "csvarchive=\$(ls ${dir2}/*.csv)"			# Various
+	echo "htmlarchive=\$(ls ${dir2}/*.html)"		# FastQC
+	echo "pdfarchive=\$(ls ${dir2}/*.pdf)"			# Various
+	echo "resultsarchive=\$(ls ${dir2}/*.results)"	# RSEM files
+	echo "ziparchive=\$(ls ${dir2}/*.zip)"			# FastQC
+	# Create an archive of all csv, html, pdf and zip files for easy download
+	echo "for i in \${csvarchive}; do cp -rf \"\${i}\" ${dir2}/Results_$(basename "${dir2}")/\"\$(basename \"\${i}\")\"; done"
+	echo "for i in \${htmlarchive}; do cp -rf \"\${i}\" ${dir2}/Results_$(basename "${dir2}")/\"\$(basename \"\${i}\")\"; done"
+	echo "for i in \${pdfarchive}; do cp -rf \"\${i}\" ${dir2}/Results_$(basename "${dir2}")/\"\$(basename \"\${i}\")\"; done"
+	echo "for i in \${resultsarchive}; do cp -rf \"\${i}\" ${dir2}/Results_$(basename "${dir2}")/\"\$(basename \"\${i}\")\"; done"
+	echo "for i in \${ziparchive}; do cp -rf \"\${i}\" ${dir2}/Results_$(basename "${dir2}")/\"\$(basename \"\${i}\")\"; done"
+	echo "cp -rf ${dir2}/Cufflinks${reanalysis} ${dir2}/Results_$(basename "${dir2}")/"
+	echo "cp -rf ${dir2}/merged.gtf ${dir2}/Results_$(basename "${dir2}")/"
+	echo "cp -rf ${dir2}/DESeq2${reanalysis} ${dir2}/Results_$(basename "${dir2}")/"
+	echo "cp -rf ${dir2}/MAJIQ${reanalysis} ${dir2}/Results_$(basename "${dir2}")/"
+	echo "rm \$(find ${dir2}/Results_$(basename "${dir2}")/MAJIQ${reanalysis} -maxdepth 1 -type f -not -name '*.sql')"
+	echo "cp -rf ${dir2}/LeafCutter${reanalysis} ${dir2}/Results_$(basename "${dir2}")/"
+	echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results_$(basename "${dir2}").tar.gz Results_$(basename "${dir2}")"
+	if [ -n "${iftttkey}" ] && [ -n "${iftttevent}" ]
+	then
+		# Trigger IFTTT maker channel event when it's ready, nice isn't it?
+		echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}"
+	fi
+
+	# Cleaning commands
+	if [ "${debug}" != "1" ]
+	then
+		# Remove error files upon successful completion. Comment to disable.
+		echo "rm ${dir2}/*.err"
+		# Remove logs folder upon successfull completion. Comment to disable.
+		echo "rm -rf ${dir2}/logs"
+		# Remove Temporary directory
+		echo "rm -rf \"${tmp}\""
+		# Remove .sbatch
+		echo "rm ${dir2}/${samplename}_${job}.sbatch"
+	fi
+	echo "exit 0"
+
+} > "${dir2}/${samplename}_${job}.sbatch"
 
 # Queue job
-SBnotif=$(sbatch ${dir2}/${samplename}_${job}.sbatch)
+until sbatch "${dir2}/${samplename}_${job}.sbatch" >/dev/null 2>&1; do echo "Job submission failed (exit code ${?}) - Trying again in 5s"; sleep 5; done
+echo ""
 echo "-- Results ready notification job queued --"
 echo ""
 
 
 
 # Clean temporary files
-[ -f ${dir2}/files1 ] && rm ${dir2}/files1
-[ -f ${dir2}/files2 ] && rm ${dir2}/files2
-[ -f ${dir2}/Fastqs ] && rm ${dir2}/Fastqs
-[ -f ${dir2}/matrices ] && rm ${dir2}/matrices
+if [ "${debug}" != "1" ]
+then
+	[ -f "${dir2}/files1" ] && rm "${dir2}/files1"
+	[ -f "${dir2}/files2" ] && rm "${dir2}/files2"
+	[ -f "${dir2}/Fastqs" ] && rm "${dir2}/Fastqs"
+	[ -f "${dir2}/matrices" ] && rm "${dir2}/matrices"
+fi
 
 # That's all folks!
-exit
+exit 0

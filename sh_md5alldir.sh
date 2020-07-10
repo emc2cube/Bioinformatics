@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Usage: sh_md5alldir.sh </path/to/dir/> [OPTIONS]
+# Usage: sh_md5alldir.sh [OPTIONS] </path/to/dir/>
 #
 ##############################################################
 ##                       Description                        ##
@@ -19,9 +19,9 @@
 ##
 
 # Help!
-if [ "${1}" == "--help" ] || [ "${2}" == "--help" ] || [ "${3}" == "--help" ]
+if [ "${1}" = "--help" ]
 then
-	echo "Usage: $(basename $0) </path/to/dir/> [OPTIONS]"
+	echo "Usage: $(basename "$0") [OPTIONS] </path/to/dir/>"
 	echo ""
 	echo "Description"
 	echo ""
@@ -30,59 +30,79 @@ then
 	echo "files against the existing <directory_name>.md5 file."
 	echo ""
 	echo "Options:"
-	echo "$(basename $0) -f or --force : even if there is already a <directory>.md5 file, it will be replaced by a new <directory>.md5 file."
-	echo "$(basename $0) --help : Display this help message."
-	echo "$(basename $0) --version : Display version number."
+	echo "$(basename "$0") -f or --force : even if there is already a <directory>.md5 file, it will be replaced by a new <directory>.md5 file."
+	echo "$(basename "$0") --help : Display this help message."
+	echo "$(basename "$0") --version : Display version number."
 	echo ""
 	exit
 fi
 
 # Version
-if [ "${1}" == "--version" ] || [ "${2}" == "--version" ] || [ "${3}" == "--version" ]
+if [ "${1}" = "--version" ]
 then
-	echo "$(basename $0) version 1.0"
+	echo "$(basename "$0") version 1.0.1"
 	exit
 fi
 
-dir="${1}"
+dir="${2}"
 
 # Check paths and trailing / in directories
 if [ -z "${dir}" ]
 then
-	$(echo "${0} --help")
+	${0} --help
 	exit
 fi
 
-if [ ${dir: -1} == "/" ]
-then
-	dir=${dir%?}
-fi
+echo ""
 
-folders=$(find $(readlink -f ${dir}) -mindepth 1 -type d -not -path "*/.*")
+folders=$(find -L "${dir}" -mindepth 1 -type d -not -path "*/.*")
 
 if [ -z "${folders}" ]
 then
-	if [ -f "${dir}/$(basename $dir).md5" ] && [ "$2" != "--force" -o "$2" != "-f" ]
+	cd "${dir}" || exit
+	if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
 	then
-		echo "Checking ${dir} content"
-		cd ${dir}
-		md5sum -c $(basename ${dir}).md5 2>/dev/null
+		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+		if [ -n "${files}" ]
+		then
+			echo "Creating md5 file for ${dir} contents"
+			md5sum ${files} > "$(basename "${dir}")".md5
+		fi
+	elif [ -f "$(basename "${dir}").md5" ]
+	then
+		echo "Checking ${dir} contents"
+		md5sum -c "$(basename "${dir}")".md5
 	else
-		echo "Creating md5 file for ${dir} content"
-		md5sum ${dir}/* > ${dir}/$(basename $dir).md5 2>/dev/null
+		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+		if [ -n "${files}" ]
+		then
+			echo "Creating md5 file for ${dir} contents"
+			md5sum ${files} > "$(basename "${dir}")".md5
+		fi
 	fi
 else
 	for i in ${folders}
 	do
-		if [ -f "${i}/$(basename $i).md5" ] && [ "${2}" != "--force" -o "${2}" != "-f" ]
+		cd "${i}" || exit
+		if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
+		then
+			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+			if [ -n "${files}" ]
+			then
+				echo "Creating md5 file for files in ${i}"
+				md5sum ${files} > "$(basename "${i}")".md5
+			fi
+		elif [ -f "$(basename "${i}").md5" ]
 		then
 			echo "Checking ${i} content"
-			cd ${i}
-			md5sum -c $(basename ${i}).md5 2>/dev/null
+			md5sum -c "$(basename "${i}")".md5
 		else
-			echo "Creating md5 file for files in ${i}"
-			files=$(find $(readlink -f ${i}) -type f -not -name ".*")
-			md5sum ${files} > ${i}/$(basename $i).md5 2>/dev/null
+			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+			if [ -n "${files}" ]
+			then
+				echo "Creating md5 file for files in ${i}"
+				md5sum basename ${files} > "$(basename "${i}")".md5
+			fi
 		fi
 	done
 fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Usage: sh_sha1alldir.sh </path/to/dir/> [OPTIONS]
+# Usage: sh_sha1alldir.sh [OPTIONS] </path/to/dir/>
 #
 ##############################################################
 ##                       Description                        ##
@@ -19,9 +19,9 @@
 ##
 
 # Help!
-if [ "${1}" == "--help" ] || [ "${2}" == "--help" ] || [ "${3}" == "--help" ]
+if [ "${1}" = "--help" ]
 then
-	echo "Usage: $(basename $0) </path/to/dir/> [OPTIONS]"
+	echo "Usage: $(basename "$0") [OPTIONS] </path/to/dir/>"
 	echo ""
 	echo "Description"
 	echo ""
@@ -30,83 +30,78 @@ then
 	echo "files against the existing <directory_name>.sha1 file."
 	echo ""
 	echo "Options:"
-	echo "$(basename $0) -f or --force : even if there is already a <directory>.sha1 file, it will be replaced by a new <directory>.sha1 file."
-	echo "$(basename $0) --help : Display this help message."
-	echo "$(basename $0) --version : Display version number."
+	echo "$(basename "$0") -f or --force : even if there is already a <directory>.sha1 file, it will be replaced by a new <directory>.sha1 file."
+	echo "$(basename "$0") --help : Display this help message."
+	echo "$(basename "$0") --version : Display version number."
 	echo ""
 	exit
 fi
 
 # Version
-if [ "${1}" == "--version" ] || [ "${2}" == "--version" ] || [ "${3}" == "--version" ]
+if [ "${1}" = "--version" ]
 then
-	echo "$(basename $0) version 1.0"
+	echo "$(basename "$0") version 1.0.1"
 	exit
 fi
 
-dir="${1}"
+dir="${2}"
 
 # Check paths and trailing / in directories
 if [ -z "${dir}" ]
 then
-	$(echo "${0} --help")
+	${0} --help
 	exit
-fi
-
-if [ ${dir: -1} == "/" ]
-then
-	dir=${dir%?}
 fi
 
 echo ""
 
-folders=$(find ${dir} -mindepth 1 -type d -not -path "*/.*")
+folders=$(find -L "${dir}" -mindepth 1 -type d -not -path "*/.*")
 
 if [ -z "${folders}" ]
 then
-	cd ${dir}
-	if  [ "${2}" == "--force" ] || [ "${2}" == "-f" ]
+	cd "${dir}" || exit
+	if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
 	then
-		files=$(find -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" | sed "s#./##g")
+		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 		if [ -n "${files}" ]
 		then
 			echo "Creating sha1 file for ${dir} contents"
-			sha1sum ${files} > $(basename ${dir}).sha1
+			sha1sum ${files} > "$(basename "${dir}")".sha1
 		fi
-	elif [ -f "$(basename ${dir}).sha1" ]
+	elif [ -f "$(basename "${dir}").sha1" ]
 	then
 		echo "Checking ${dir} contents"
-		sha1sum -c $(basename ${dir}).sha1
+		sha1sum -c "$(basename "${dir}")".sha1
 	else
-		files=$(find -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" | sed "s#./##g")
+		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 		if [ -n "${files}" ]
 		then
 			echo "Creating sha1 file for ${dir} contents"
-			sha1sum ${files} > $(basename ${dir}).sha1
+			sha1sum ${files} > "$(basename "${dir}")".sha1
 		fi
 	fi
 else
 	for i in ${folders}
 	do
-		cd ${i}
-		if  [ "${2}" == "--force" ] || [ "${2}" == "-f" ]
+		cd "${i}" || exit
+		if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
 		then
-			files=$(find -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" | sed "s#./##g")
+			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 			if [ -n "${files}" ]
 			then
 				echo "Creating sha1 file for files in ${i}"
-				sha1sum ${files} > $(basename ${i}).sha1
+				sha1sum ${files} > "$(basename "${i}")".sha1
 			fi
-		elif [ -f "$(basename ${i}).sha1" ]
+		elif [ -f "$(basename "${i}").sha1" ]
 		then
 			echo "Checking ${i} content"
-			sha1sum -c $(basename ${i}).sha1
+			sha1sum -c "$(basename "${i}")".sha1
 		else
-			files=$(find -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" | sed "s#./##g")
+			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 			if [ -n "${files}" ]
 			then
 				echo "Creating sha1 file for files in ${i}"
-				sha1sum basename ${files} > $(basename ${i}).sha1
+				sha1sum basename ${files} > "$(basename "${i}")".sha1
 			fi
 		fi
 	done
