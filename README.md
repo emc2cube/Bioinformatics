@@ -118,7 +118,7 @@ This script will process all sub-directories of the input folders and for each o
 ### Usage
 
 ```sh
-sh_md5alldir.sh </path/to/dir/> [OPTIONS]
+sh_md5alldir.sh [OPTIONS] </path/to/dir/>
 ```
 
 
@@ -134,7 +134,7 @@ This script will process all sub-directories of the input folders and for each o
 ### Usage
 
 ```sh
-sh_sha1alldir.sh </path/to/dir/> [OPTIONS]
+sh_sha1alldir.sh [OPTIONS] </path/to/dir/>
 ```
 
 

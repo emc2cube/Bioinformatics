@@ -1,6 +1,6 @@
 {
   "name": "emc2cube-bioinformatics",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Set of high throughput sequencing analysis scripts to quickly generate and queue jobs on SLURM-based HPC clusters",
   "repository": {
     "type": "git",
