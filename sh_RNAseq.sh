@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2028,SC2030,SC2031
 #
 # Usage: sh_RNAseq.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini] [OutputDirName]
 #
@@ -222,18 +223,25 @@ exonfile="${annotations}/leafcutter_exons.txt.gz"
 anncode="${annotations}/leafcutter"
 #
 #
-## IFTTT options
+## Notifications options
+#
+# Event name used in your webhooks or IFTTT recipes.
+# The IFTTT maker channel will look for the combination private key + event name to then trigger your recipe.
+# You can then create a recipe to send an email, a text message or a push notification.
+# In the case of a Slack webhook this will be used in the message title
+notifevent="RNAseq"
+#
+# Trigger a Slack Webhook when script is done.
+# You must create an "Incoming WebHooks" associated to your slack workspace on https://slack.com/apps
+# Copy your full private webhook URL here. Leave blank to disable this function.
+# slackwebhookURL="https://hooks.slack.com/services/T5HF5GTUK85/AHUIK456HJG/GSD27f5gGQ7SD5r2fg" # Not a real webhook URL, you have to use your own private one.
+slackwebhookURL=""
 #
 # Trigger IFTTT when script is done.
-# You must register the "Maker channel" on https://ifttt.com/maker
+# You must register the "Maker channel" on https://ifttt.com/maker and create an event (limit of 3 free event since September 2020...)
 # Copy your private key here. Leave blank to disable this function.
-# iftttkey="AbCd_15CdhUIvbsFJTHGMcfgjsdHRTgcyjt" # Not a real key, you have to use your own private key.
+# iftttkey="AbCd_15CdhUIvbsFJTHGMcfgjsdHRTgcyjt" # Not a real key, you have to use your own private one.
 iftttkey=""
-#
-# Event name used in your IFTTT recipes.
-# The maker channel will look for the combination private key + event name to then trigger your recipe.
-# You can create a recipe to send an email, a text message or a push notification.
-iftttevent="RNAseq"
 #
 #
 ## Setup done. You should not need to edit below this point ##
@@ -479,26 +487,26 @@ then
 	if [ "${blank}" = "0" ]
 	then
 		# Remove all Undetermined_* and BLANK* files
-		find -L "${dir}" -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	else
 		# Remove all Undetermined_* files
-		find -L "${dir}" -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	fi
 else
 	if [ "${blank}" = "0" ]
 	then
 		# Remove all BLANK* files
-		find -L "${dir}" -name '*_R1*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	else
 		# Process all the files!
-		find -L "${dir}" -name '*_R1*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	fi
 fi
@@ -2657,10 +2665,15 @@ samplename="$(basename "${dir2}")-RNAseq"
 	echo "rm \$(find ${dir2}/Results_$(basename "${dir2}")/MAJIQ${reanalysis} -maxdepth 1 -type f -not -name '*.sql')"
 	echo "cp -rf ${dir2}/LeafCutter${reanalysis} ${dir2}/Results_$(basename "${dir2}")/"
 	echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results_$(basename "${dir2}").tar.gz Results_$(basename "${dir2}")"
-	if [ -n "${iftttkey}" ] && [ -n "${iftttevent}" ]
+	if [ -n "${iftttkey}" ] && [ -n "${notifevent}" ]
 	then
 		# Trigger IFTTT maker channel event when it's ready, nice isn't it?
-		echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}"
+		echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${notifevent}/with/key/${iftttkey}"
+	fi
+	if [ -n "${slackwebhookURL}" ]
+	then
+		# Trigger a Slack Webhook when it's ready, nice isn't it?
+		echo "curl -X POST -d \"payload={'blocks': [ { 'type': 'section','text': {'type': 'mrkdwn','text': '*${notifevent}\$(date +' on %A %B %d %Y at %H:%M')*' } }, {'type': 'section', 'text': {'type': 'mrkdwn','text': '@$(whoami) - $(basename "${dir2}") is done'} } ] }\" ${slackwebhookURL}"
 	fi
 
 	# Cleaning commands

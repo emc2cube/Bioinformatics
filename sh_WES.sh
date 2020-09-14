@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2028,SC2030,SC2031
 #
 # Usage: sh_WES.sh </path/to/fastq(.gz)/folder> </path/to/destination/folder> [/path/to/config/file.ini]
 #
@@ -123,7 +124,7 @@ gatk="/Tools/GATK/GenomeAnalysisTK.jar"
 # It must be the same one that was indexed by bowtie2 for alignment
 fasta_refgenome="/Tools/RefGenomes/Homo_sapiens/UCSC/hg19/Sequence/WholeGenomeFasta/genome.fa"
 #
-# List of the targeted intervals sequenced. 
+# List of the targeted intervals sequenced.
 # This is necessary as only about 60-70% of all the reads will end up in exonic regions and the rest may align anywhere else in the genome.
 # To restrict the output to exonic sequences, generate a file containing for example all the exons plus 50bp at each end for getting splice site information as well.
 # This can be done using the UCSC Table Browser (http://genome.ucsc.edu/cgi-bin/hgTables?command=start).
@@ -155,7 +156,7 @@ realign="0"
 gvcf="0"
 #
 # PED file to specify family relations if available.
-ped=$([ -f "${dir}/$(basename ${dir}).ped" ] && echo "${dir}/$(basename ${dir}).ped")
+ped=$([ -f "${1}/$(basename "${1}").ped" ] && echo "${1}/$(basename "${1}").ped")
 #
 # Folder containing gVCFs to be used as a learning control for VQSR calibration.
 # Leave empty if you have a ready to use .vcf file and use popgvcf below.
@@ -188,18 +189,25 @@ protocol="refGene,phastConsElements46way,genomicSuperDups,gwasCatalog,esp6500siv
 operation="g,r,r,r,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f"
 #
 #
-## IFTTT options
+## Notifications options
+#
+# Event name used in your webhooks or IFTTT recipes.
+# The IFTTT maker channel will look for the combination private key + event name to then trigger your recipe.
+# You can then create a recipe to send an email, a text message or a push notification.
+# In the case of a Slack webhook this will be used in the message title
+notifevent="SNPCalling"
+#
+# Trigger a Slack Webhook when script is done.
+# You must create an "Incoming WebHooks" associated to your slack workspace on https://slack.com/apps
+# Copy your full private webhook URL here. Leave blank to disable this function.
+# slackwebhookURL="https://hooks.slack.com/services/T5HF5GTUK85/AHUIK456HJG/GSD27f5gGQ7SD5r2fg" # Not a real webhook URL, you have to use your own private one.
+slackwebhookURL=""
 #
 # Trigger IFTTT when script is done.
-# You must register the "Maker channel" on https://ifttt.com/maker
+# You must register the "Maker channel" on https://ifttt.com/maker and create an event (limit of 3 free event since September 2020...)
 # Copy your private key here. Leave blank to disable this function.
-# iftttkey="AbCd_15CdhUIvbsFJTHGMcfgjsdHRTgcyjt" # Not a real key, you have to use your own private key.
+# iftttkey="AbCd_15CdhUIvbsFJTHGMcfgjsdHRTgcyjt" # Not a real key, you have to use your own private one.
 iftttkey=""
-#
-# Event name used in your IFTTT recipes.
-# The maker channel will look for the combination private key + event name to then trigger your recipe.
-# You can create a recipe to send an email, a text message or a push notification.
-iftttevent="SNPCalling"
 #
 #
 ## Setup done. You should not need to edit below this point ##
@@ -452,26 +460,26 @@ then
 	if [ "${blank}" = "0" ]
 	then
 		# Remove all Undetermined_* and BLANK* files
-		find -L "${dir}" -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' -not -name 'BLANK*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	else
 		# Remove all Undetermined_* files
-		find -L "${dir}" -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' -not -name '*ndetermined*' -not -name '*nmatched*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	fi
 else
 	if [ "${blank}" = "0" ]
 	then
 		# Remove all BLANK* files
-		find -L "${dir}" -name '*_R1*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' -not -name 'BLANK*' | sort -n | sed 's#.*/##' > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	else
 		# Process all the files!
-		find -L "${dir}" -name '*_R1*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
-		find -L "${dir}" -name '*_R2*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
+		find -L "${dir}" -maxdepth 1 -name '*_R1*' | sed 's#.*/##' | sort -n > "${dir2}/files1"
+		find -L "${dir}" -maxdepth 1 -name '*_R2*' | sed 's#.*/##' | sort -n > "${dir2}/files2"
 		paste "${dir2}/files1" "${dir2}/files2" > "${dir2}/Fastqs"
 	fi
 fi
@@ -494,7 +502,7 @@ do
 	samplename=$(echo "${read1}" | awk -F_R1 '{print $1}')
 
 	echo ""
-	echo "-- Queuing sample jobs"
+	echo -e "\t-- Processing" "${samplename}"
 
 
 
@@ -702,7 +710,7 @@ do
 			fi
 
 			# Job specific commands
-			echo "fastqc -o ${dir2}/ --noextract ${dir2}/${trimout1} ${dir2}/${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi"
+			echo "fastqc -o ${dir2}/ --noextract ${trimout1} ${trimout2} || if [ -f ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err ]; then echo \${SLURM_JOB_NODELIST} >> ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && exit 1; else echo \${SLURM_JOB_NODELIST} > ${dir2}/\${SLURM_JOBID}-${samplename}_${job}.err && scontrol requeue \${SLURM_JOBID} && sleep 42m; fi"
 
 			# Cleaning commands
 			if [ "${debug}" != "1" ]
@@ -1167,10 +1175,15 @@ then
 		fi
 
 		# Job specific commands
-		if [ -n "${iftttkey}" ]
+		if [ -n "${iftttkey}" ] && [ -n "${notifevent}" ]
 		then
 			# Trigger IFTTT maker channel event when it's ready, nice isn't it?
-			echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}"
+			echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${notifevent}/with/key/${iftttkey}"
+		fi
+		if [ -n "${slackwebhookURL}" ]
+		then
+			# Trigger a Slack Webhook when it's ready, nice isn't it?
+			echo "curl -X POST -d \"payload={'blocks': [ { 'type': 'section','text': {'type': 'mrkdwn','text': '*${notifevent}\$(date +' on %A %B %d %Y at %H:%M')*' } }, {'type': 'section', 'text': {'type': 'mrkdwn','text': '@$(whoami) - $(basename "${dir2}") is done'} } ] }\" ${slackwebhookURL}"
 		fi
 
 		# Cleaning commands
@@ -1490,10 +1503,15 @@ samplename="$(basename "${dir2}")-WES"
 	echo "for i in \${pdfarchive}; do cp -rf \$i ${dir2}/Results_$(basename "${dir2}")/\`basename \$i\`; done"
 	echo "for i in \${ziparchive}; do cp -rf \$i ${dir2}/Results_$(basename "${dir2}")/\`basename \$i\`; done"
 	echo "tar --remove-files -C ${dir2} -pczf ${dir2}/Results.tar.gz Results_$(basename "${dir2}")"
-	if [ -n "${iftttkey}" ] && [ -n "${iftttevent}" ]
+	if [ -n "${iftttkey}" ] && [ -n "${notifevent}" ]
 	then
 		# Trigger IFTTT maker channel event when it's ready, nice isn't it?
-		echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${iftttevent}/with/key/${iftttkey}"
+		echo "curl -X POST -H \"Content-Type: application/json\" -d '{ \"value1\" : \"$(basename "${dir2}")\" , \"value2\" : \"$(whoami)\"}' https://maker.ifttt.com/trigger/${notifevent}/with/key/${iftttkey}"
+	fi
+	if [ -n "${slackwebhookURL}" ]
+	then
+		# Trigger a Slack Webhook when it's ready, nice isn't it?
+		echo "curl -X POST -d \"payload={'blocks': [ { 'type': 'section','text': {'type': 'mrkdwn','text': '*${notifevent}\$(date +' on %A %B %d %Y at %H:%M')*' } }, {'type': 'section', 'text': {'type': 'mrkdwn','text': '@$(whoami) - $(basename "${dir2}") is done'} } ] }\" ${slackwebhookURL}"
 	fi
 
 	# Cleaning commands
