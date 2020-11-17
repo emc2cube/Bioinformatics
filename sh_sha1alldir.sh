@@ -44,7 +44,12 @@ then
 	exit
 fi
 
-dir="${2}"
+if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
+then
+	dir="${2}"
+else
+	dir="${1}"
+fi
 
 # Check paths and trailing / in directories
 if [ -z "${dir}" ]

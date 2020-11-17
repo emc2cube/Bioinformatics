@@ -404,7 +404,7 @@ fi
 ## Processing samples
 ######################
 
-find -L "${dir}" -name "*${fileext}" | sed 's#.*/##' | sort -n > "${dir2}/Fastqs"
+find -L "${dir}" -maxdepth 1 -name "*${fileext}" | sed 's#.*/##' | sort -n > "${dir2}/Fastqs"
 
 if [ ${usecastle} -eq "1" ]  ## Start of casTLE
 then

@@ -115,8 +115,8 @@ garbage <- dev.off() # Save to file
 
 
 # Volcano plot with "significant" genes labeled
-# sigthresh=0.05 and lfcthresh=2 are the default values if ommitted when creating the graph. No need to edit here.
-volcanoplot <- function (res, lfcthresh=2, sigthresh=0.05, main="Volcano Plot", legendpos="bottomright", labelsig=TRUE, textcx=1, ...) {
+# sigthresh=0.05 and lfcthresh=1 are the default values if ommitted when creating the graph. No need to edit here.
+volcanoplot <- function (res, lfcthresh=1, sigthresh=0.05, main="Volcano Plot", legendpos="bottomright", labelsig=TRUE, textcx=1, ...) {
   with(res, plot(log2FoldChange, -log10(pvalue), pch=20, main=main, ...))
   with(subset(res, padj<sigthresh ), points(log2FoldChange, -log10(pvalue), pch=20, col="red", ...))
   with(subset(res, abs(log2FoldChange)>lfcthresh), points(log2FoldChange, -log10(pvalue), pch=20, col="orange", ...))
