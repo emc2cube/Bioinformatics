@@ -61,6 +61,7 @@ See the [RNAseq.ini](https://github.com/emc2cube/Bioinformatics/blob/master/conf
 * [R](https://www.r-project.org) should be installed on your system in a location included in your $PATH.
 * [DESeq2](https://bioconductor.org/packages/release/bioc/html/DESeq2.html) (recommended) or [Cufflinks](http://cole-trapnell-lab.github.io/cufflinks/) (deprecated) for differential expression analysis.
 * [MAJIQ](https://majiq.biociphers.org) and/or [LeafCutter](https://davidaknowles.github.io/leafcutter/) for local splicing variation detection.
+	* This pipeline was created when LeafCutter documentation (and code) was on [commit 249fc26](https://github.com/davidaknowles/leafcutter/tree/249fc26f6e35201fc12fb560d347c9e792e64e5f). Since then documentation and potentially code changed considerably and *may* not be backward compatible despite keeping the same 0.2.9 version number...
 * (optional) [Trimmomatic](http://www.usadellab.org/cms/index.php?page=trimmomatic) should be installed on your system for read trimming.
 * (optional) [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) should be installed on your system in a location included in your $PATH for quality control.
 * (optional) [DESeqAnalysis](https://deseqanalysis.acidgenomics.com) for advanced graph options downstream of DESeq2 analysis.

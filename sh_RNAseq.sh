@@ -276,7 +276,7 @@ fi
 # Version
 if [ "${1}" = "--version" ] || [ "${2}" = "--version" ] || [ "${3}" = "--version" ] || [ "${4}" = "--version" ]
 then
-	echo "$(basename "${0}") version 2.1.1"
+	echo "$(basename "${0}") version 2.1.2"
 	echo "Now easier to add analyses in a rerun and improved default R graphs (2.1.1)"
 	echo "Alternative splicing support (2.1)"
 	echo "DESeq2 and Single-Read support (2.0)"
@@ -566,6 +566,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi) $(if [ -n "${threads}" ] && [ "${threads}" -gt "2" ]; then echo "--cpus-per-task=2"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=2:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -645,6 +646,7 @@ then
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=8:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -740,6 +742,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=1:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -808,6 +811,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=8:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -837,7 +841,7 @@ then
 				fi
 
 				# Job specific commands
-				echo "rsem-calculate-expression --seed-length 10 -p ${threads} --temporary-folder \"${tmp}\"/${samplename} $(if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]; then echo "--paired-end"; fi) --bam --no-bam-output --calc-ci ${dir2}/${samplename}.Aligned.toTranscriptome.out.bam ${rs_refgenome} ${dir2}/${samplename}.rsem || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${job}_${samplename}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${job}_${samplename}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${job}_${samplename}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
+				echo "rsem-calculate-expression -p ${threads} --temporary-folder \"${tmp}\"/${samplename} $(if [ -n "${pairedend}" ] && [ "${pairedend}" = "1" ]; then echo "--paired-end"; fi) --bam --no-bam-output --calc-ci ${dir2}/${samplename}.Aligned.toTranscriptome.out.bam ${rs_refgenome} ${dir2}/${samplename}.rsem || if [ -f ${dir2}/\"\${SLURM_JOBID}\"-${job}_${samplename}.err ]; then echo \"\${SLURM_JOB_NODELIST}\" >> ${dir2}/\"\${SLURM_JOBID}\"-${job}_${samplename}.err && exit 1; else echo \"\${SLURM_JOB_NODELIST}\" > ${dir2}/\"\${SLURM_JOBID}\"-${job}_${samplename}.err && scontrol requeue \"\${SLURM_JOBID}\" && sleep 42m; fi"
 				echo "mv ${dir2}/${samplename}.rsem.stat ${dir2}/${samplename}.rsem"
 
 				# Cleaning commands
@@ -871,6 +875,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=8:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -936,6 +941,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=2:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1032,6 +1038,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=8:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1102,6 +1109,7 @@ then
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 		echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=15:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1234,6 +1242,7 @@ then
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "16" ]; then echo "--mem=16000"; else echo "--mem=${mem}000"; fi)"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=15:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -1372,7 +1381,7 @@ garbage <- dev.off() # Save to file
 # Principal Components Analysis with labels
 try(library(DESeqAnalysis))
 pdf(paste0(output, "all-PCAlabels.pdf"), width=20, height=20)
-try(DESeqAnalysis::plotPCA(vsd, label = TRUE, interestingGroups="condition", title="all PCA"))
+try(DESeqAnalysis::plotPCA(vsd, label=TRUE, interestingGroups="condition", labels=list(title="all PCA")))
 garbage <- dev.off() # Save to file
 
 
@@ -1420,6 +1429,7 @@ RALLDELIM
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "16" ]; then echo "--mem=16000"; else echo "--mem=${mem}000"; fi)"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=10:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -1608,7 +1618,7 @@ garbage <- dev.off() # Save to file
 # Principal Components Analysis with labels
 try(library(DESeqAnalysis))
 pdf(paste0(output, cond1, "_vs_", cond2, "-PCAlabels.pdf"), width=20, height=20)
-try(DESeqAnalysis::plotPCA(vsd, label = TRUE, interestingGroups="condition", title=paste0(cond1, " vs ", cond2, " PCA")))
+try(DESeqAnalysis::plotPCA(vsd, label=TRUE, interestingGroups="condition", labels=list(title=paste0(cond1, " vs ", cond2, " PCA"))))
 garbage <- dev.off() # Save to file
 
 
@@ -1682,6 +1692,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=8:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1752,6 +1763,7 @@ then
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=8:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -1828,6 +1840,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=8:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1894,6 +1907,7 @@ then
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=2:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1955,6 +1969,7 @@ then
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=1:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -2067,7 +2082,8 @@ MBDELIM
 		# General SLURM parameters
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
-		echo "#SBATCH --cpus-per-task=${threads}"
+		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=2:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -2149,6 +2165,7 @@ MBDELIM
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=30:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -2239,6 +2256,7 @@ MBDELIM
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=30:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -2344,6 +2362,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=2:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -2413,6 +2432,7 @@ then
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 			echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=30:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -2513,7 +2533,8 @@ then
 				# General SLURM parameters
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
-				echo "#SBATCH --cpus-per-task=${threads}"
+				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=1:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -2613,6 +2634,7 @@ samplename="$(basename "${dir2}")-RNAseq"
 	echo '#!/bin/bash'
 	echo "#SBATCH --job-name=${job}_${samplename} --output=${dir2}/${logs}/${job}_${samplename}.out --error=${dir2}/${logs}/${job}_${samplename}.err --open-mode=append"
 	echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+	echo "#SBATCH --requeue"
 	echo "#SBATCH --time=10:00"
 	if [ -n "${SLURMemail}" ]
 	then

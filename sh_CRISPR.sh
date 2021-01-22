@@ -221,7 +221,7 @@ fi
 # Version
 if [ "${1}" == "--version" ] || [ "${2}" == "--version" ] || [ "${3}" == "--version" ] || [ "${4}" == "--version" ]
 then
-	echo "$(basename "${0}") version 2.0.1"
+	echo "$(basename "${0}") version 2.0.2"
 	echo "Major code cleaning (2.0.1)"
 	echo "casTLE and MAGeCK support (2.0)"
 	exit
@@ -438,6 +438,7 @@ then
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
 			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi) $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=10:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -500,7 +501,8 @@ then
 			# General SLURM parameters
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
-			echo "#SBATCH --cpus-per-task=${threads}"
+			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=1:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -570,6 +572,7 @@ then
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=15:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -649,7 +652,8 @@ then
 					# General SLURM parameters
 					echo '#!/bin/bash'
 					echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
-					echo "#SBATCH --cpus-per-task=${threads}"
+					echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+					echo "#SBATCH --requeue"
 					echo "#SBATCH --time=30:00"
 					if [ -n "${SLURMemail}" ]
 					then
@@ -713,7 +717,8 @@ then
 						# General SLURM parameters
 						echo '#!/bin/bash'
 						echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
-						echo "#SBATCH --cpus-per-task=${threads} --mem=${mem}000"
+						echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+						echo "#SBATCH --requeue"
 						echo "#SBATCH --time=3:00:00"
 						if [ -n "${SLURMemail}" ]
 						then
@@ -805,7 +810,8 @@ then
 				# General SLURM parameters
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
-				echo "#SBATCH --cpus-per-task=${threads}"
+				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=3:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -867,7 +873,8 @@ then
 				# General SLURM parameters
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
-				echo "#SBATCH --cpus-per-task=${threads}"
+				echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=6:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -930,6 +937,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=15:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -992,6 +1000,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=15:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1055,6 +1064,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi) $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=15:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1117,6 +1127,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/casTLE/${logs}/${samplename}_${job}.out --error=${dir2}/casTLE/${logs}/${samplename}_${job}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=15:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1204,7 +1215,8 @@ then
 		# General SLURM parameters
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/MAGeCK/${logs}/${samplename}_${job}.out --error=${dir2}/MAGeCK/${logs}/${samplename}_${job}.err --open-mode=append"
-		echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+		echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=8:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1280,7 +1292,8 @@ then
 				# General SLURM parameters
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/MAGeCK/${logs}/${samplename}_${job}.out --error=${dir2}/MAGeCK/${logs}/${samplename}_${job}.err --open-mode=append"
-				echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=2:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1340,13 +1353,14 @@ then
 				mkdir -p "${dir2}/MAGeCK/results/pathway"
 
 				# Variables
-				job="MAGeCK-pathway"
+				job="MAGeCK_pathway"
 
 				{
 					# General SLURM parameters
 					echo '#!/bin/bash'
 					echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/MAGeCK/${logs}/${samplename}_${job}.out --error=${dir2}/MAGeCK/${logs}/${samplename}_${job}.err --open-mode=append"
-					echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+					echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+					echo "#SBATCH --requeue"
 					echo "#SBATCH --time=1:00:00"
 					if [ -n "${SLURMemail}" ]
 					then
@@ -1416,7 +1430,8 @@ then
 		# General SLURM parameters
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/MAGeCK/${logs}/${samplename}_${job}.out --error=${dir2}/MAGeCK/${logs}/${samplename}_${job}.err --open-mode=append"
-		echo "#SBATCH --cpus-per-task=${threads}"
+		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=6:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1521,6 +1536,7 @@ then
 				echo '#!/bin/bash'
 				echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/MAGeCK/${logs}/${samplename}_${job}.out --error=${dir2}/MAGeCK/${logs}/${samplename}_${job}.err --open-mode=append"
 				echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi)"
+				echo "#SBATCH --requeue"
 				echo "#SBATCH --time=1:00:00"
 				if [ -n "${SLURMemail}" ]
 				then
@@ -1612,6 +1628,7 @@ samplename=$(basename "${dir2}")
 	echo '#!/bin/bash'
 	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${samplename}_${job}.out"
 	echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+	echo "#SBATCH --requeue"
 	echo "#SBATCH --time=10:00"
 	if [ -n "${SLURMemail}" ]
 	then

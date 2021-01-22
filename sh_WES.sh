@@ -234,7 +234,7 @@ fi
 # Version
 if [ "${1}" = "--version" ] || [ "${2}" = "--version" ] || [ "${3}" = "--version" ] || [ "${4}" = "--version" ]
 then
-	echo "$(basename "${0}") version 2.0.1"
+	echo "$(basename "${0}") version 2.0.2"
 	echo "Only for GATK 3.X ( 3.8.1 tested, download from https://software.broadinstitute.org/gatk/download/archive )"
 	echo "Major code cleaning (2.0.1)"
 	echo ".g.vcf support (2.0)"
@@ -530,6 +530,7 @@ do
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "8" ]; then echo "--mem=8000"; else echo "--mem=${mem}000"; fi) $(if [ -n "${threads}" ] && [ "${threads}" -gt "2" ]; then echo "--cpus-per-task=2"; else echo "--cpus-per-task=${threads}"; fi)"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=3:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -602,6 +603,7 @@ do
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=8:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -682,6 +684,7 @@ do
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 			echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "4" ]; then echo "--mem=4000"; else echo "--mem=${mem}000"; fi) $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=1:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -751,6 +754,7 @@ do
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH $(if [ -n "${mem}" ] && [ ${mem} -gt "64" ]; then echo "--mem=64000"; else echo "--mem=${mem}000"; fi)"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=4:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -828,6 +832,7 @@ do
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=8:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -910,6 +915,7 @@ do
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=8:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -987,6 +993,7 @@ do
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=8:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1061,6 +1068,7 @@ do
 			echo '#!/bin/bash'
 			echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 			echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+			echo "#SBATCH --requeue"
 			echo "#SBATCH --time=8:00:00"
 			if [ -n "${SLURMemail}" ]
 			then
@@ -1146,6 +1154,7 @@ then
 		echo '#!/bin/bash' > "${dir2}"/${samplename}_"${job}".sbatch
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=2:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1229,6 +1238,7 @@ then
 		echo '#!/bin/bash'
 		echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 		echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+		echo "#SBATCH --requeue"
 		echo "#SBATCH --time=8:00:00"
 		if [ -n "${SLURMemail}" ]
 		then
@@ -1301,6 +1311,7 @@ filteredSNP="${LB}-JointGenotypeOutput.filtered.vcf"
 	echo '#!/bin/bash'
 	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 	echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+	echo "#SBATCH --requeue"
 	echo "#SBATCH --time=8:00:00"
 	if [ -n "${SLURMemail}" ]
 	then
@@ -1389,6 +1400,7 @@ snpssummary="${LB}-JointGenotypeOutput.snps"
 	echo '#!/bin/bash'
 	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 	echo "#SBATCH --mem=${mem}000 --cpus-per-task=${threads}"
+	echo "#SBATCH --requeue"
 	echo "#SBATCH --time=4:00:00"
 	if [ -n "${SLURMemail}" ]
 	then
@@ -1459,6 +1471,7 @@ samplename="$(basename "${dir2}")-WES"
 	echo '#!/bin/bash'
 	echo "#SBATCH --job-name=${samplename}_${job} --output=${dir2}/${logs}/${samplename}_${job}.out --error=${dir2}/${logs}/${samplename}_${job}.err --open-mode=append"
 	echo "#SBATCH $(if [ -n "${threads}" ] && [ "${threads}" -gt "1" ]; then echo "--cpus-per-task=1"; else echo "--cpus-per-task=${threads}"; fi)"
+	echo "#SBATCH --requeue"
 	echo "#SBATCH --time=10:00"
 	if [ -n "${SLURMemail}" ]
 	then

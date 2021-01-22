@@ -40,7 +40,7 @@ fi
 # Version
 if [ "${1}" = "--version" ]
 then
-	echo "$(basename "$0") version 1.0.1"
+	echo "$(basename "$0") version 1.0.2"
 	exit
 fi
 
@@ -67,7 +67,7 @@ then
 	cd "${dir}" || exit
 	if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
 	then
-		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 		if [ -n "${files}" ]
 		then
 			echo "Creating md5 file for ${dir} contents"
@@ -78,7 +78,7 @@ then
 		echo "Checking ${dir} contents"
 		md5sum -c "$(basename "${dir}")".md5
 	else
-		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+		files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 		if [ -n "${files}" ]
 		then
 			echo "Creating md5 file for ${dir} contents"
@@ -91,7 +91,7 @@ else
 		cd "${i}" || exit
 		if  [ "${1}" = "--force" ] || [ "${1}" = "-f" ]
 		then
-			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 			if [ -n "${files}" ]
 			then
 				echo "Creating md5 file for files in ${i}"
@@ -102,7 +102,7 @@ else
 			echo "Checking ${i} content"
 			md5sum -c "$(basename "${i}")".md5
 		else
-			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.md5" -not -name "*.md5" | sed "s#./##g" | sort -n)
+			files=$(find -L . -maxdepth 1 -type f -not -name ".*" -not -name "*.sha1" -not -name "*.md5" | sed "s#./##g" | sort -n)
 			if [ -n "${files}" ]
 			then
 				echo "Creating md5 file for files in ${i}"
